@@ -77,7 +77,7 @@ func main() {
 
 ### Install
 ```sh
-go get github.com/open-trust/ot-go-lib/cmd/otgo.go
+go get github.com/open-trust/ot-go-lib/cmd/otgo
 ```
 
 ```sh

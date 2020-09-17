@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -32,6 +33,28 @@ func (i *ioGroup) output(filename string, data []byte) error {
 	return err
 }
 
+type versionCmd struct {
+	ioGroup
+}
+
+func (*versionCmd) Name() string { return "version" }
+func (*versionCmd) Synopsis() string {
+	return "print otgo version."
+}
+func (*versionCmd) Usage() string {
+	return `version
+
+Print otgo version.
+`
+}
+
+func (c *versionCmd) SetFlags(_ *flag.FlagSet) {}
+
+func (c *versionCmd) Execute(_ context.Context, _ *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+	fmt.Fprintln(c.ioOut, fmt.Sprintf("otgo version %s %s/%s", otgo.Version, runtime.GOOS, runtime.GOARCH))
+	return subcommands.ExitSuccess
+}
+
 type keyCmd struct {
 	ioGroup
 	alg string
@@ -41,7 +64,7 @@ type keyCmd struct {
 
 func (*keyCmd) Name() string { return "key" }
 func (*keyCmd) Synopsis() string {
-	return "Generate a new private key or generate a public key from a private key."
+	return "generate a new private key or generate a public key from a private key."
 }
 func (*keyCmd) Usage() string {
 	return `key [-alg algorithm] [-jwk privateKey] [-out filename]
@@ -119,7 +142,7 @@ type signCmd struct {
 
 func (*signCmd) Name() string { return "sign" }
 func (*signCmd) Synopsis() string {
-	return "Sign a OTVID with the given private key and payload."
+	return "sign a OTVID with the given private key and payload."
 }
 func (*signCmd) Usage() string {
 	return `sign [-jwk privateKey] [-out filename] [-sub subject] [-iss issuer] [-aud audience] [-exp expiry]
@@ -200,7 +223,7 @@ type verifyCmd struct {
 
 func (*verifyCmd) Name() string { return "verify" }
 func (*verifyCmd) Synopsis() string {
-	return "Parse and verify a OTVID with the given public key(s)."
+	return "parse and verify a OTVID with the given public key(s)."
 }
 func (*verifyCmd) Usage() string {
 	return `verify [-jwk publicKey] [-out filename] [otvid]
@@ -280,6 +303,7 @@ func main() {
 	subcommands.Register(subcommands.CommandsCommand(), "")
 
 	iog := ioGroup{ioOut: subcommands.DefaultCommander.Output, ioErr: subcommands.DefaultCommander.Error}
+	subcommands.Register(&versionCmd{ioGroup: iog}, "")
 	subcommands.Register(&keyCmd{ioGroup: iog}, "")
 	subcommands.Register(&signCmd{ioGroup: iog}, "")
 	subcommands.Register(&verifyCmd{ioGroup: iog}, "")
