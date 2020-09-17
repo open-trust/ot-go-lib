@@ -45,6 +45,11 @@ func (o *OTVID) from(t jwt.Token) error {
 	o.Expiry = t.Expiration()
 	o.IssuedAt = t.IssuedAt()
 	o.Claims = t.PrivateClaims()
+	o.Claims["sub"] = t.Subject()
+	o.Claims["iss"] = t.Issuer()
+	o.Claims["aud"] = t.Audience()
+	o.Claims["ext"] = t.Expiration()
+	o.Claims["iat"] = t.IssuedAt()
 	return nil
 }
 
@@ -59,9 +64,8 @@ func (o *OTVID) Validate() error {
 	if err := o.Audience.Validate(); err != nil {
 		return err
 	}
-	exp := o.Expiry.Truncate(time.Second)
-	if !time.Now().Truncate(time.Second).Before(exp) {
-		return errors.New(`otgo.OTVID.Validate: expiration time not satisfied`)
+	if len(o.Audience) == 0 {
+		return errors.New(`otgo.OTVID.Validate: audience not exists`)
 	}
 	return nil
 }
@@ -72,14 +76,24 @@ func (o *OTVID) Verify(keys *Keys, issuer, audience OTID) error {
 	if err != nil {
 		return err
 	}
+	if err = o.verifyClaims(issuer, audience); err != nil {
+		return err
+	}
+	_, err = jwt.ParseString(o.token, jwt.WithKeySet(keys))
+	return err
+}
+
+func (o *OTVID) verifyClaims(issuer, audience OTID) error {
 	if !o.Issuer.Equal(issuer) {
 		return errors.New(`otgo.OTVID.Verify: issuer not satisfied`)
 	}
 	if !o.Audience.Has(audience) {
 		return errors.New(`otgo.OTVID.Verify: audience not satisfied`)
 	}
-	_, err = jwt.ParseString(o.token, jwt.WithKeySet(keys))
-	return err
+	if !time.Now().Truncate(time.Second).Before(o.Expiry) {
+		return errors.New(`otgo.OTVID.Validate: expiration time not satisfied`)
+	}
+	return nil
 }
 
 // Token ...
@@ -158,13 +172,9 @@ func ParseOTVID(token string, keys *Keys, issuer, audience OTID) (*OTVID, error)
 	if err = vid.Validate(); err != nil {
 		return nil, err
 	}
-	if !vid.Issuer.Equal(issuer) {
-		return nil, errors.New(`ParseOTVID: issuer not satisfied`)
+	if err = vid.verifyClaims(issuer, audience); err != nil {
+		return nil, err
 	}
-	if !vid.Audience.Has(audience) {
-		return nil, errors.New(`ParseOTVID: audience not satisfied`)
-	}
-
 	return vid, nil
 }
 
@@ -177,6 +187,9 @@ func ParseOTVIDInsecure(token string) (*OTVID, error) {
 	}
 	vid := &OTVID{token: token}
 	if err = vid.from(t); err != nil {
+		return nil, err
+	}
+	if err = vid.Validate(); err != nil {
 		return nil, err
 	}
 	return vid, nil

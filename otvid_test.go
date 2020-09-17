@@ -24,9 +24,6 @@ func TestOTVID(t *testing.T) {
 		assert.NotNil(vid.Validate())
 
 		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
-		assert.NotNil(vid.Validate())
-
-		vid.Expiry = time.Now().Add(time.Hour)
 		assert.Nil(vid.Validate())
 	})
 

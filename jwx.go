@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
@@ -34,6 +35,13 @@ func ParseKey(s string) (Key, error) {
 
 // ParseKeys ...
 func ParseKeys(s string) (*Keys, error) {
+	if !strings.Contains(s, `"keys"`) {
+		key, err := ParseKey(s)
+		if err != nil {
+			return nil, err
+		}
+		return &jwk.Set{Keys: []jwk.Key{key}}, nil
+	}
 	ks, err := jwk.ParseString(s)
 	if err == nil {
 		err = validateKeys(ks.Keys...)
