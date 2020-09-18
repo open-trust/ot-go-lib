@@ -78,11 +78,13 @@ func TestJWX(t *testing.T) {
 			assert.Equal(pubKeys.Keys[i].KeyID(), key.KeyID())
 		}
 
-		priKey := otgo.MustPrivateKey("PS256")
-		priS = mustMarshal(priKey)
-		keys, err = otgo.ParseKeys(priS)
+		priKey1 := otgo.MustPrivateKey("PS256")
+		priKey2 := otgo.MustPrivateKey("ES256")
+		keys, err = otgo.ParseKeys(mustMarshal(priKey1), mustMarshal(priKey2))
 		assert.Nil(err)
-		assert.Equal(1, len(keys.Keys))
+		assert.Equal(2, len(keys.Keys))
+		assert.Equal(keys.Keys[0].KeyID(), priKey1.KeyID())
+		assert.Equal(keys.Keys[1].KeyID(), priKey2.KeyID())
 	})
 
 	t.Run("LookupPublicKeys func", func(t *testing.T) {

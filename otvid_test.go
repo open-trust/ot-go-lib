@@ -37,6 +37,17 @@ func TestOTVID(t *testing.T) {
 		assert.True(vid.MaybeRevoked())
 	})
 
+	t.Run("OTVID.ShouldRenew method", func(t *testing.T) {
+		assert := assert.New(t)
+
+		vid := &otgo.OTVID{}
+		assert.True(vid.ShouldRenew())
+		vid.Expiry = time.Now()
+		assert.True(vid.ShouldRenew())
+		vid.Expiry = time.Now().Add(time.Second * 11)
+		assert.False(vid.ShouldRenew())
+	})
+
 	t.Run("OTVID.Sign & OTVID.Verify method", func(t *testing.T) {
 		assert := assert.New(t)
 

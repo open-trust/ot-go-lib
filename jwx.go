@@ -34,21 +34,31 @@ func ParseKey(s string) (Key, error) {
 }
 
 // ParseKeys ...
-func ParseKeys(s string) (*Keys, error) {
-	if !strings.Contains(s, `"keys"`) {
+func ParseKeys(ss ...string) (*Keys, error) {
+	if len(ss) == 0 {
+		return nil, errors.New("otgo.ParseKeys: keys string is empty")
+	}
+
+	if strings.Contains(ss[0], `"keys"`) {
+		ks, err := jwk.ParseString(ss[0])
+		if err == nil {
+			err = validateKeys(ks.Keys...)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return ks, nil
+	}
+
+	ks := &jwk.Set{}
+	for _, s := range ss {
 		key, err := ParseKey(s)
 		if err != nil {
 			return nil, err
 		}
-		return &jwk.Set{Keys: []jwk.Key{key}}, nil
+		ks.Keys = append(ks.Keys, key)
 	}
-	ks, err := jwk.ParseString(s)
-	if err == nil {
-		err = validateKeys(ks.Keys...)
-	}
-	if err != nil {
-		return nil, err
-	}
+
 	return ks, nil
 }
 

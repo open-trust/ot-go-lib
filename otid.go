@@ -25,18 +25,24 @@ func (td TrustDomain) String() string {
 	return string(td)
 }
 
+// VerifyURL returns the Open Trust Authority verify URL for the trust domain, e.g. https://example.org/.well-known/open-trust-configuration.
+func (td TrustDomain) VerifyURL() string {
+	return fmt.Sprintf("https://%s/.well-known/open-trust-configuration", td)
+}
+
 // OTID returns the Open Trust ID of the trust domain.
 // The TrustDomain should be checked with Validate() method before using.
 func (td TrustDomain) OTID() OTID {
-	return OTID{trustDomain: td}
+	id := OTID{trustDomain: td}
+	id.build()
+	return id
 }
 
 // NewOTID returns a Open Trust ID with the given subjectType and subjectID inside the trust domain.
 // The OTID should be checked with Validate() method before using.
 func (td TrustDomain) NewOTID(subjectType, subjectID string) OTID {
-	id := td.OTID()
-	id.subjectType = subjectType
-	id.subjectID = subjectID
+	id := OTID{trustDomain: td, subjectType: subjectType, subjectID: subjectID}
+	id.build()
 	return id
 }
 
@@ -45,7 +51,7 @@ type OTID struct {
 	trustDomain TrustDomain
 	subjectType string
 	subjectID   string
-	checkedErr  *string
+	otid        string
 }
 
 // ParseOTID parses a Open Trust ID from a string.
@@ -62,7 +68,7 @@ func ParseOTID(s string) (OTID, error) {
 
 // NewOTID creates a new OTID using the trust domain (e.g. example.org) and subject parameters (type and ID).
 func NewOTID(trustDomain string, subject ...string) (OTID, error) {
-	id := OTID{}
+	id := &OTID{}
 	id.trustDomain = TrustDomain(trustDomain)
 	switch len(subject) {
 	case 0: // do nothing
@@ -70,27 +76,27 @@ func NewOTID(trustDomain string, subject ...string) (OTID, error) {
 		id.subjectType = subject[0]
 		id.subjectID = subject[1]
 		if id.subjectType == "" || id.subjectID == "" {
-			return id, fmt.Errorf("otgo.NewOTID: invalid subject params %#v", subject)
+			return OTID{}, fmt.Errorf("otgo.NewOTID: invalid subject params %#v", subject)
 		}
 	default:
-		return id, fmt.Errorf("otgo.NewOTID: invalid subject params %#v", subject)
+		return OTID{}, fmt.Errorf("otgo.NewOTID: invalid subject params %#v", subject)
 	}
-	return id, id.Validate()
+	id.build()
+	if err := id.Validate(); err != nil {
+		return OTID{}, err
+	}
+	return *id, nil
 }
 
 // Validate returns a error if the OTID is invalid.
 func (id OTID) Validate() error {
-	if id.checkedErr == nil {
-		s := id.validate()
-		id.checkedErr = &s
+	if e := id.validate(); e != "" {
+		return fmt.Errorf("otgo.OTID.Validate: %s", e)
 	}
-	if *id.checkedErr == "" {
-		return nil
-	}
-	return fmt.Errorf("otgo.OTID.Validate: %s", *id.checkedErr)
+	return nil
 }
 
-func (id OTID) validate() string {
+func (id *OTID) validate() string {
 	if err := id.trustDomain.Validate(); err != nil {
 		return err.Error()
 	}
@@ -110,8 +116,8 @@ func (id OTID) validate() string {
 		}
 	}
 
-	if s := len(id.trustDomain) + len(id.subjectType) + len(id.subjectID); s > 1016 {
-		return fmt.Sprintf("invalid OTID, %d is too long", s)
+	if l := len(id.otid); l > 1024 {
+		return fmt.Sprintf("invalid OTID, %d is too long", l)
 	}
 	return ""
 }
@@ -123,7 +129,7 @@ func (id OTID) MemberOf(td TrustDomain) bool {
 
 // Equal returns true if the OTID is the same as another OTID.
 func (id OTID) Equal(another OTID) bool {
-	return id.trustDomain == another.trustDomain && id.subjectType == another.subjectType && id.subjectID == another.subjectID
+	return id.otid == another.otid
 }
 
 // TrustDomain returns the OTID's trust domain.
@@ -144,11 +150,22 @@ func (id OTID) ID() string {
 // String returns the string representation of the OTID.
 // e.g., "otid:ot.example.com:user:9eebccd2-12bf-40a6-b262-65fe0487d453".
 func (id OTID) String() string {
-	s := "otid:" + string(id.trustDomain)
+	return id.otid
+}
+
+func (id *OTID) build() {
+	var b strings.Builder
+	b.Grow(len(id.trustDomain) + 5)
+	b.WriteString("otid:")
+	b.WriteString(string(id.trustDomain))
 	if id.subjectType != "" {
-		s = fmt.Sprintf("%s:%s:%s", s, id.subjectType, id.subjectID)
+		b.Grow(len(id.subjectType) + len(id.subjectID) + 2)
+		b.WriteRune(':')
+		b.WriteString(id.subjectType)
+		b.WriteRune(':')
+		b.WriteString(id.subjectID)
 	}
-	return s
+	id.otid = b.String()
 }
 
 // MarshalJSON implements the json.Marshaler interface.
@@ -225,6 +242,7 @@ func (ids OTIDs) Strings() []string {
 	return ss
 }
 
+// Validate ...
 func (ids OTIDs) Validate() error {
 	for _, v := range ids {
 		if err := v.Validate(); err != nil {
