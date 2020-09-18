@@ -46,6 +46,9 @@ func NewHolder(ctx context.Context, sub OTID, privateKeys ...string) (*Holder, e
 
 // GetOTVIDToken ...
 func (vf *Holder) GetOTVIDToken(aud OTID) (string, error) {
+	if aud.String() == "" {
+		return "", fmt.Errorf("invalid audience OTVID %s", aud)
+	}
 	vf.mu.RLock()
 	vid, ok := vf.otvidsCache[aud.String()]
 	vf.mu.RUnlock()
@@ -57,7 +60,7 @@ func (vf *Holder) GetOTVIDToken(aud OTID) (string, error) {
 
 // AddOTVIDTokens ...
 func (vf *Holder) AddOTVIDTokens(tokens ...string) error {
-	vids := make([]*OTVID, 0)
+	vids := make([]*OTVID, 0, len(tokens))
 	for _, token := range tokens {
 		vid, err := ParseOTVIDInsecure(token)
 		if err == nil {

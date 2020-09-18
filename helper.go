@@ -6,7 +6,7 @@ import (
 )
 
 // Version ...
-const Version = "v0.3.0"
+const Version = "v0.3.1"
 
 const headerAuthorization = "Authorization"
 const authPrefix = "Bearer "
@@ -19,6 +19,9 @@ type Debugger interface {
 
 // Debugging ...
 var Debugging Debugger
+
+// HTTPClient ...
+var HTTPClient *http.Client
 
 // ExtractTokenFromHeader ...
 func ExtractTokenFromHeader(h http.Header) string {

@@ -37,7 +37,17 @@ func TestHolder(t *testing.T) {
 		hd, err := otgo.NewHolder(context.Background(), td.NewOTID("app", "123"), mustMarshal(pk))
 		assert.Nil(err)
 
-		aud := td.NewOTID("svc", "tester")
+		var aud otgo.OTID
+		_, err = hd.GetOTVIDToken(aud)
+		assert.NotNil(err)
+		assert.Contains(err.Error(), "invalid audience OTVID")
+
+		aud = otgo.OTID{}
+		_, err = hd.GetOTVIDToken(aud)
+		assert.NotNil(err)
+		assert.Contains(err.Error(), "invalid audience OTVID")
+
+		aud = td.NewOTID("svc", "tester")
 		_, err = hd.GetOTVIDToken(aud)
 		assert.NotNil(err)
 

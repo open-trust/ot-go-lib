@@ -109,7 +109,7 @@ func (o *OTVID) MaybeRevoked() bool {
 
 // ShouldRenew ...
 func (o *OTVID) ShouldRenew() bool {
-	return time.Now().Add(time.Second * 10).After(o.Expiry)
+	return time.Now().Add(time.Second * 60).After(o.Expiry)
 }
 
 // Sign ...

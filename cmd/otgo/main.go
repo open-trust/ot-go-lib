@@ -69,7 +69,12 @@ func (*keyCmd) Synopsis() string {
 func (*keyCmd) Usage() string {
 	return `key [-alg algorithm] [-jwk privateKey] [-out filename]
 
-Generate a new private key or generate a public key from a private key.
+Generate a new private key:
+	otgo key -alg ES256 -out key.jwk
+
+Generate a public key from a private key:
+	otgo key -jwk key.jwk -out pub.jwk
+	otgo key -jwk '{"kty":"EC","alg":"ES256","crv":"P-256", ...i20cxb248khaEA5PYmeB9Z4YBY"}'
 `
 }
 
@@ -147,7 +152,8 @@ func (*signCmd) Synopsis() string {
 func (*signCmd) Usage() string {
 	return `sign [-jwk privateKey] [-out filename] [-sub subject] [-iss issuer] [-aud audience] [-exp expiry]
 
-Sign a OTVID with the given private key and payload.
+Sign a OTVID with the given private key and payload:
+	otgo sign -jwk key.jwk -sub otid:localhost:test:123 -iss otid:localhost -aud otid:localhost:svc:auth -exp 24h
 `
 }
 
@@ -229,6 +235,12 @@ func (*verifyCmd) Usage() string {
 	return `verify [-jwk publicKey] [-out filename] [otvid]
 
 Parse and verify a OTVID with the given public key(s).
+
+Parse and verify a OTVID:
+	otgo verify -jwk pub.jwk eyJhbGciOiJFUzI1NiIsImtpZCI6InFLU0YyS...7xcp0xfcpU3cz8Nn244awnEBl_3Pwjy62nEywLDQ_g
+
+Parse and verify a OTVID with remote public keys:
+	otgo verify -jwk https://my-trust-domain/.well-known/open-trust-configuration eyJhbGciOiJFUzI1NiIsImtpZCI6InFLU0YyS...7xcp0xfcpU3cz8Nn244awnEBl_3Pwjy62nEywLDQ_g
 `
 }
 
