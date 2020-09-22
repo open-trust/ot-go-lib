@@ -1,6 +1,7 @@
 package otgo_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func TestOTVID(t *testing.T) {
 		vid := &otgo.OTVID{}
 		assert.False(vid.MaybeRevoked())
 
-		vid.Claims = map[string]interface{}{"rts": 11111}
+		vid.ReleaseID = "1234567"
 		assert.True(vid.MaybeRevoked())
 	})
 
@@ -44,7 +45,7 @@ func TestOTVID(t *testing.T) {
 		assert.True(vid.ShouldRenew())
 		vid.Expiry = time.Now()
 		assert.True(vid.ShouldRenew())
-		vid.Expiry = time.Now().Add(time.Second * 11)
+		vid.Expiry = time.Now().Add(time.Second * 61)
 		assert.False(vid.ShouldRenew())
 	})
 
@@ -100,12 +101,14 @@ func TestOTVID(t *testing.T) {
 	t.Run("ParseOTVID func", func(t *testing.T) {
 		assert := assert.New(t)
 
-		vid := &otgo.OTVID{}
+		vid := &otgo.OTVID{Claims: make(map[string]interface{})}
 		td := otgo.TrustDomain("localhost")
 		vid.ID = td.NewOTID("user", "abc")
 		vid.Issuer = td.OTID()
 		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
 		vid.Expiry = time.Now().Add(time.Hour)
+		vid.ReleaseID = "123456789"
+		vid.Claims["name"] = "test"
 
 		keys := otgo.MustKeys(otgo.MustPrivateKey("ES256"))
 		pubKeys := otgo.LookupPublicKeys(keys)
@@ -122,6 +125,9 @@ func TestOTVID(t *testing.T) {
 		assert.Nil(err)
 		assert.True(vid2.ID.Equal(vid.ID))
 		assert.True(vid2.IssuedAt.Equal(vid.IssuedAt))
+		assert.Equal("123456789", vid2.ReleaseID)
+		assert.Equal("123456789", vid2.Claims["rid"].(string))
+		assert.Equal("test", vid2.Claims["name"].(string))
 
 		_, err = otgo.ParseOTVID(token, pubKeys2, vid.Issuer, vid.Audience[0])
 		assert.NotNil(err)
@@ -145,7 +151,7 @@ func TestOTVID(t *testing.T) {
 		vid.Issuer = td.OTID()
 		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
 		vid.Expiry = time.Now().Add(time.Hour)
-		vid.Claims = map[string]interface{}{"rts": 12345, "sub": "123"}
+		vid.Claims = map[string]interface{}{"rid": 12345, "sub": "123"}
 
 		keys := otgo.MustKeys(otgo.MustPrivateKey("ES256"))
 		pubKeys := otgo.LookupPublicKeys(keys)
@@ -159,10 +165,22 @@ func TestOTVID(t *testing.T) {
 		assert.Nil(err)
 
 		vid2, err := otgo.ParseOTVIDInsecure(token)
+		assert.NotNil(err)
+		assert.Contains(err.Error(), "invalid 'rid' field")
+
+		vid.Claims = map[string]interface{}{"name": strings.Repeat("a", 2000)}
+		token, err = vid.Sign(key)
+		assert.NotNil(err)
+		assert.Contains(err.Error(), "is too large")
+
+		vid.Claims = map[string]interface{}{"rid": "12345", "sub": "123"}
+		token, err = vid.Sign(key)
+		assert.Nil(err)
+		vid2, err = otgo.ParseOTVIDInsecure(token)
 		assert.Nil(err)
 		assert.True(vid2.ID.Equal(vid.ID))
 		assert.True(vid2.IssuedAt.Equal(vid.IssuedAt))
-		assert.Equal(float64(12345), vid2.Claims["rts"])
+		assert.Equal("12345", vid2.Claims["rid"])
 		assert.Nil(vid2.Verify(pubKeys, vid.Issuer, vid.Audience[0]))
 		assert.NotNil(vid2.Verify(pubKeys2, vid.Issuer, vid.Audience[0]))
 		assert.NotNil(vid2.Verify(pubKeys2, vid.ID, vid.Audience[0]))

@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const otidMaxSize = 512
+
 // TrustDomain ...
 type TrustDomain string
 
@@ -116,8 +118,8 @@ func (id *OTID) validate() string {
 		}
 	}
 
-	if l := len(id.otid); l > 1024 {
-		return fmt.Sprintf("invalid OTID, %d is too long", l)
+	if l := len(id.otid); l > otidMaxSize {
+		return fmt.Sprintf("invalid OTID, it' length %d is too large", l)
 	}
 	return ""
 }

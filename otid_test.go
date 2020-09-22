@@ -211,10 +211,10 @@ func TestOTID(t *testing.T) {
 		id = td.NewOTID("user", "123☺")
 		assert.NotNil(id.Validate())
 
-		id = td.NewOTID("user", strings.Repeat("a", 1000))
+		id = td.NewOTID("user", strings.Repeat("a", 480))
 		assert.Nil(id.Validate())
 
-		id = td.NewOTID("user", strings.Repeat("a", 1024))
+		id = td.NewOTID("user", strings.Repeat("a", 512))
 		assert.NotNil(id.Validate())
 	})
 

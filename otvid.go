@@ -2,12 +2,15 @@ package otgo
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jws"
 	"github.com/lestrrat-go/jwx/jwt"
 )
+
+const otvidMaxSize = 2048
 
 // OTVID represents a Open Trust Verifiable Identity Document.
 type OTVID struct {
@@ -21,6 +24,8 @@ type OTVID struct {
 	Expiry time.Time
 	// IssuedAt is the the time at which the OTVID was issued as present in 'iat' claim
 	IssuedAt time.Time
+	// Release ID
+	ReleaseID string
 	// Claims is the parsed claims from token
 	Claims map[string]interface{}
 	// token is the serialized JWT token
@@ -40,6 +45,12 @@ func (o *OTVID) from(t jwt.Token) error {
 	o.Audience, err = ParseOTIDs(t.Audience()...)
 	if err != nil {
 		return err
+	}
+
+	if rid, ok := t.Get("rid"); ok {
+		if o.ReleaseID, ok = rid.(string); !ok {
+			return fmt.Errorf("invalid 'rid' field, must be a string")
+		}
 	}
 
 	o.Expiry = t.Expiration()
@@ -103,8 +114,7 @@ func (o *OTVID) Token() string {
 
 // MaybeRevoked ...
 func (o *OTVID) MaybeRevoked() bool {
-	_, ok := o.Claims["rts"] // Release Timestamp Claim
-	return ok
+	return o.ReleaseID != ""
 }
 
 // ShouldRenew ...
@@ -143,6 +153,11 @@ func (o *OTVID) Sign(key Key) (string, error) {
 	if err = t.Set("aud", o.Audience.Strings()); err != nil {
 		return "", err
 	}
+	if o.ReleaseID != "" {
+		if err = t.Set("rid", o.ReleaseID); err != nil {
+			return "", err
+		}
+	}
 
 	o.IssuedAt = time.Now().UTC().Truncate(time.Second)
 	if err = t.Set("iat", o.IssuedAt); err != nil {
@@ -160,12 +175,18 @@ func (o *OTVID) Sign(key Key) (string, error) {
 		return "", err
 	}
 	o.token = string(s)
+	if l := len(s); l > otvidMaxSize {
+		return "", fmt.Errorf("invalid OTVID, it' length %d is too large", l)
+	}
 	return o.token, nil
 }
 
 // ParseOTVID parses a OTVID from a serialized JWT token.
 // The OTVID signature is verified using the JWK set.
 func ParseOTVID(token string, keys *Keys, issuer, audience OTID) (*OTVID, error) {
+	if l := len(token); l < 64 || l > 2048 {
+		return nil, fmt.Errorf("invalid OTVID token with length %d", l)
+	}
 	t, err := jwt.ParseString(token, jwt.WithKeySet(keys))
 	if err != nil {
 		return nil, err
@@ -186,6 +207,9 @@ func ParseOTVID(token string, keys *Keys, issuer, audience OTID) (*OTVID, error)
 // ParseOTVIDInsecure parses a OTVID from a serialized JWT token.
 // The OTVID signature is not verified.
 func ParseOTVIDInsecure(token string) (*OTVID, error) {
+	if l := len(token); l < 64 || l > 2048 {
+		return nil, fmt.Errorf("invalid OTVID token with length %d", l)
+	}
 	t, err := jwt.ParseString(token)
 	if err != nil {
 		return nil, err
