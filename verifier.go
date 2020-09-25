@@ -47,11 +47,14 @@ func NewVerifier(ctx context.Context, aud OTID, refreshKeys bool, publicKeys ...
 		}
 		vf.refreshKeys(ctx)
 	}
-
-	if len(vf.ks.Keys) == 0 {
-		return nil, fmt.Errorf("no public keys exists")
-	}
 	return vf, nil
+}
+
+// SetKeys ...
+func (vf *Verifier) SetKeys(publicKeys Keys) {
+	vf.mu.Lock()
+	vf.ks = &publicKeys
+	vf.mu.Unlock()
 }
 
 // ParseOTVID ...
@@ -87,9 +90,7 @@ func (vf *Verifier) refreshKeys(ctx context.Context) {
 func (vf *Verifier) fetchKeys(ctx context.Context) error {
 	ks, err := FetchKeys(ctx, vf.td.VerifyURL(), HTTPClient)
 	if err == nil && len(ks.Keys) > 0 {
-		vf.mu.Lock()
-		vf.ks = ks
-		vf.mu.Unlock()
+		vf.SetKeys(*ks)
 	}
 	return err
 }

@@ -44,6 +44,13 @@ func NewHolder(ctx context.Context, sub OTID, privateKeys ...string) (*Holder, e
 	return vf, nil
 }
 
+// SetKeys ...
+func (vf *Holder) SetKeys(privateKeys Keys) {
+	vf.mu.Lock()
+	vf.ks = &privateKeys
+	vf.mu.Unlock()
+}
+
 // GetOTVIDToken ...
 func (vf *Holder) GetOTVIDToken(aud OTID) (string, error) {
 	if aud.String() == "" {
@@ -60,7 +67,7 @@ func (vf *Holder) GetOTVIDToken(aud OTID) (string, error) {
 
 // AddOTVIDTokens ...
 func (vf *Holder) AddOTVIDTokens(tokens ...string) error {
-	vids := make([]*OTVID, 0, len(tokens))
+	vids := make([]OTVID, 0, len(tokens))
 	for _, token := range tokens {
 		vid, err := ParseOTVIDInsecure(token)
 		if err == nil {
@@ -73,7 +80,7 @@ func (vf *Holder) AddOTVIDTokens(tokens ...string) error {
 		if err != nil {
 			return err
 		}
-		vids = append(vids, vid)
+		vids = append(vids, *vid)
 	}
 	vf.cacheOTVIDTokens(vids...)
 	return nil
@@ -98,11 +105,11 @@ func (vf *Holder) SignSelf(exp ...time.Duration) (string, error) {
 	return vid.Sign(key)
 }
 
-func (vf *Holder) cacheOTVIDTokens(vids ...*OTVID) {
+func (vf *Holder) cacheOTVIDTokens(vids ...OTVID) {
 	vf.mu.Lock()
 	for _, vid := range vids {
 		for _, aud := range vid.Audience {
-			vf.otvidsCache[aud.String()] = vid
+			vf.otvidsCache[aud.String()] = &vid
 		}
 	}
 	vf.mu.Unlock()

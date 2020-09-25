@@ -126,9 +126,11 @@ func ToPublicKey(k Key) (Key, error) {
 // LookupPublicKeys ...
 func LookupPublicKeys(ks *Keys) *Keys {
 	rs := &jwk.Set{Keys: make([]Key, 0)}
-	for _, k := range ks.Keys {
-		if pub, err := ToPublicKey(k); err == nil {
-			rs.Keys = append(rs.Keys, pub)
+	if ks != nil {
+		for _, k := range ks.Keys {
+			if pub, err := ToPublicKey(k); err == nil {
+				rs.Keys = append(rs.Keys, pub)
+			}
 		}
 	}
 	return rs

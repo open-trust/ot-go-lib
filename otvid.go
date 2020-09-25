@@ -90,6 +90,9 @@ func (o *OTVID) Verify(keys *Keys, issuer, audience OTID) error {
 	if err = o.verifyClaims(issuer, audience); err != nil {
 		return err
 	}
+	if keys == nil {
+		return fmt.Errorf("otgo.OTVID.Verify: public keys required")
+	}
 	_, err = jwt.ParseString(o.token, jwt.WithKeySet(keys))
 	return err
 }
@@ -186,6 +189,9 @@ func (o *OTVID) Sign(key Key) (string, error) {
 func ParseOTVID(token string, keys *Keys, issuer, audience OTID) (*OTVID, error) {
 	if l := len(token); l < 64 || l > 2048 {
 		return nil, fmt.Errorf("invalid OTVID token with length %d", l)
+	}
+	if keys == nil {
+		return nil, fmt.Errorf("otgo.ParseOTVID: public keys required")
 	}
 	t, err := jwt.ParseString(token, jwt.WithKeySet(keys))
 	if err != nil {
