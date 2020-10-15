@@ -149,6 +149,11 @@ func (id OTID) ID() string {
 	return id.subjectID
 }
 
+// Subject returns the OTID's subject string.
+func (id OTID) Subject() string {
+	return fmt.Sprintf("%s:%s", id.subjectType, id.subjectID)
+}
+
 // String returns the string representation of the OTID.
 // e.g., "otid:ot.example.com:user:9eebccd2-12bf-40a6-b262-65fe0487d453".
 func (id OTID) String() string {

@@ -32,6 +32,23 @@ type OTVID struct {
 	token string
 }
 
+// ToJSON returns a map[string]interface{} value represented as JWT.
+func (o *OTVID) ToJSON() map[string]interface{} {
+	j := make(map[string]interface{})
+	for k, v := range o.Claims {
+		j[k] = v
+	}
+	j["sub"] = o.ID.String()
+	j["iss"] = o.Issuer.String()
+	j["aud"] = o.Audience.Strings()
+	j["iat"] = o.IssuedAt
+	j["exp"] = o.Expiry
+	if o.ReleaseID != "" {
+		j["rid"] = o.ReleaseID
+	}
+	return j
+}
+
 func (o *OTVID) from(t jwt.Token) error {
 	var err error
 	o.ID, err = ParseOTID(t.Subject())
