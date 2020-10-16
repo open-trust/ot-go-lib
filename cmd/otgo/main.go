@@ -275,7 +275,7 @@ func (c *verifyCmd) verify(ctx context.Context, token string) error {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		ks, err = otgo.FetchKeys(ctx, s, nil)
+		ks, err = otgo.FetchKeys(ctx, s, cli)
 	} else {
 		if !strings.HasPrefix(s, "{") {
 			b, err := ioutil.ReadFile(s)
@@ -309,6 +309,8 @@ func (c *verifyCmd) verify(ctx context.Context, token string) error {
 	return err
 }
 
+var cli = otgo.DefaultHTTPClient
+
 func main() {
 	subcommands.Register(subcommands.HelpCommand(), "")
 	subcommands.Register(subcommands.FlagsCommand(), "")
@@ -322,5 +324,7 @@ func main() {
 
 	flag.Parse()
 	ctx := context.Background()
+	cli = cli.WithUA(fmt.Sprintf("Go/%v otgo/%s %s/%s", runtime.Version(), otgo.Version, runtime.GOOS, runtime.GOARCH))
+
 	os.Exit(int(subcommands.Execute(ctx)))
 }
