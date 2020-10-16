@@ -6,7 +6,7 @@ import (
 )
 
 // Version ...
-const Version = "v0.6.0"
+const Version = "v0.6.1"
 
 const headerAuthorization = "Authorization"
 const authPrefix = "Bearer "

@@ -41,8 +41,12 @@ func (o *OTVID) ToJSON() map[string]interface{} {
 	j["sub"] = o.ID.String()
 	j["iss"] = o.Issuer.String()
 	j["aud"] = o.Audience.Strings()
-	j["iat"] = o.IssuedAt
-	j["exp"] = o.Expiry
+	if !o.IssuedAt.IsZero() {
+		j["iat"] = o.IssuedAt.Unix()
+	}
+	if !o.Expiry.IsZero() {
+		j["exp"] = o.Expiry.Unix()
+	}
 	if o.ReleaseID != "" {
 		j["rid"] = o.ReleaseID
 	}

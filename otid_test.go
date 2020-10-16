@@ -30,6 +30,21 @@ func TestTrustDomain(t *testing.T) {
 		err = td.Validate()
 		assert.Nil(err)
 
+		td = otgo.TrustDomain(".example.com")
+		err = td.Validate()
+		assert.NotNil(err)
+		assert.Contains(err.Error(), "start with '.'")
+
+		td = otgo.TrustDomain("-example.com")
+		err = td.Validate()
+		assert.NotNil(err)
+		assert.Contains(err.Error(), "start with '-'")
+
+		td = otgo.TrustDomain("_example.com")
+		err = td.Validate()
+		assert.NotNil(err)
+		assert.Contains(err.Error(), "start with '_'")
+
 		td = otgo.TrustDomain("")
 		err = td.Validate()
 		assert.NotNil(err)
@@ -38,27 +53,27 @@ func TestTrustDomain(t *testing.T) {
 		td = otgo.TrustDomain("localHost")
 		err = td.Validate()
 		assert.NotNil(err)
-		assert.Contains(err.Error(), "invalid trust domain rune 'H'")
+		assert.Contains(err.Error(), "invalid rune 'H'")
 
 		td = otgo.TrustDomain(" ")
 		err = td.Validate()
 		assert.NotNil(err)
-		assert.Contains(err.Error(), "invalid trust domain rune ' '")
+		assert.Contains(err.Error(), "invalid rune ' '")
 
 		td = otgo.TrustDomain("*.example.com")
 		err = td.Validate()
 		assert.NotNil(err)
-		assert.Contains(err.Error(), "invalid trust domain rune '*'")
+		assert.Contains(err.Error(), "invalid rune '*'")
 
 		td = otgo.TrustDomain("ot.example.co m")
 		err = td.Validate()
 		assert.NotNil(err)
-		assert.Contains(err.Error(), "invalid trust domain rune ' '")
+		assert.Contains(err.Error(), "invalid rune ' '")
 
 		td = otgo.TrustDomain("ww☺.example.com ")
 		err = td.Validate()
 		assert.NotNil(err)
-		assert.Contains(err.Error(), "invalid trust domain rune '☺'")
+		assert.Contains(err.Error(), "invalid rune '☺'")
 	})
 
 	t.Run("TrustDomain.String method", func(t *testing.T) {
@@ -80,6 +95,7 @@ func TestTrustDomain(t *testing.T) {
 
 		td := otgo.TrustDomain("ot.example.com")
 		assert.Equal("otid:ot.example.com", td.OTID().String())
+		assert.True(td.OTID().IsDomainID())
 	})
 
 	t.Run("TrustDomain.NewOTID method", func(t *testing.T) {
@@ -97,10 +113,14 @@ func TestOTID(t *testing.T) {
 		id, err := otgo.NewOTID("localhost")
 		assert.Nil(err)
 		assert.Equal("otid:localhost", id.String())
+		assert.True(id.IsDomainID())
+		assert.Equal("", id.Subject())
 
 		id, err = otgo.NewOTID("localhost", "app", "auth")
 		assert.Nil(err)
 		assert.Equal("otid:localhost:app:auth", id.String())
+		assert.False(id.IsDomainID())
+		assert.Equal("app:auth", id.Subject())
 
 		id, err = otgo.NewOTID("localhost", "user", "123")
 		assert.Nil(err)

@@ -49,6 +49,26 @@ func TestOTVID(t *testing.T) {
 		assert.False(vid.ShouldRenew())
 	})
 
+	t.Run("OTVID.ToJSON method", func(t *testing.T) {
+		assert := assert.New(t)
+
+		vid := &otgo.OTVID{}
+		td := otgo.TrustDomain("localhost")
+		vid.ID = td.NewOTID("user", "abc")
+		vid.Issuer = td.OTID()
+		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
+		vid.Claims = map[string]interface{}{"name": "test"}
+		vid.Expiry = time.Now().Add(time.Second * 61)
+
+		json := vid.ToJSON()
+		assert.Equal(map[string]interface{}{
+			"sub":  "otid:localhost:user:abc",
+			"iss":  "otid:localhost",
+			"aud":  []string{"otid:localhost:app:123"},
+			"name": "test",
+			"exp":  vid.Expiry.Unix()}, json)
+	})
+
 	t.Run("OTVID.Sign & OTVID.Verify method", func(t *testing.T) {
 		assert := assert.New(t)
 

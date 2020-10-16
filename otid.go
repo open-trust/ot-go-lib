@@ -13,11 +13,12 @@ type TrustDomain string
 
 // Validate returns a error if the trust domain is invalid.
 func (td TrustDomain) Validate() error {
-	if td == "" {
+	s := string(td)
+	if s == "" {
 		return fmt.Errorf("otgo.TrustDomain.Validate: trust domain required")
 	}
-	if qr := checkRunes(string(td)); qr != "" {
-		return fmt.Errorf("otgo.TrustDomain.Validate: invalid trust domain rune %s", qr)
+	if qr := checkRunes(s); qr != "" {
+		return fmt.Errorf("otgo.TrustDomain.Validate: %s", qr)
 	}
 	return nil
 }
@@ -32,7 +33,7 @@ func (td TrustDomain) VerifyURL() string {
 	return fmt.Sprintf("https://%s/.well-known/open-trust-configuration", td)
 }
 
-// OTID returns the Open Trust ID of the trust domain.
+// OTID returns the trust domain' OTID.
 // The TrustDomain should be checked with Validate() method before using.
 func (td TrustDomain) OTID() OTID {
 	id := OTID{trustDomain: td}
@@ -108,13 +109,13 @@ func (id *OTID) validate() string {
 			return "invalid OTID, subject type required"
 		}
 		if qr := checkRunes(id.subjectType); qr != "" {
-			return fmt.Sprintf("invalid OTID subject type rune %s", qr)
+			return fmt.Sprintf("invalid OTID subject type: %s", qr)
 		}
 		if id.subjectID == "" {
 			return "invalid OTID, subject ID required"
 		}
 		if qr := checkRunes(id.subjectID); qr != "" {
-			return fmt.Sprintf("invalid OTID subject id rune %s", qr)
+			return fmt.Sprintf("invalid OTID subject id: %s", qr)
 		}
 	}
 
@@ -134,6 +135,11 @@ func (id OTID) Equal(another OTID) bool {
 	return id.otid == another.otid
 }
 
+// IsDomainID returns true if the OTID is the trust domain' OTID.
+func (id OTID) IsDomainID() bool {
+	return id.subjectType == "" && id.subjectID == ""
+}
+
 // TrustDomain returns the OTID's trust domain.
 func (id OTID) TrustDomain() TrustDomain {
 	return id.trustDomain
@@ -151,6 +157,9 @@ func (id OTID) ID() string {
 
 // Subject returns the OTID's subject string.
 func (id OTID) Subject() string {
+	if id.IsDomainID() {
+		return ""
+	}
 	return fmt.Sprintf("%s:%s", id.subjectType, id.subjectID)
 }
 
@@ -261,16 +270,19 @@ func (ids OTIDs) Validate() error {
 
 // must be Lower ALPHA / DIGIT / "." / "-" / "_"
 func checkRunes(s string) string {
-	for _, rv := range s {
+	for i, rv := range s {
 		switch {
 		case rv >= 'a' && rv <= 'z':
 			continue
 		case rv >= '0' && rv <= '9':
 			continue
 		case rv == '.' || rv == '-' || rv == '_':
+			if i == 0 {
+				return "start with " + strconv.QuoteRune(rv)
+			}
 			continue
 		default:
-			return strconv.QuoteRune(rv) // invalid rune
+			return "invalid rune " + strconv.QuoteRune(rv)
 		}
 	}
 	return ""
