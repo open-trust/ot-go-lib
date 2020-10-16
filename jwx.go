@@ -8,7 +8,6 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/lestrrat-go/jwx/jwa"
@@ -63,12 +62,12 @@ func ParseKeys(ss ...string) (*Keys, error) {
 }
 
 // FetchKeys ...
-func FetchKeys(ctx context.Context, jwkurl string, cl *http.Client) (*Keys, error) {
-	opts := make([]jwk.Option, 0)
-	if cl != nil {
-		opts = append(opts, jwk.WithHTTPClient(cl))
+func FetchKeys(ctx context.Context, jwkurl string, cl *HTTPClient) (*Keys, error) {
+	ks := &jwk.Set{}
+	if cl == nil {
+		cl = DefaultHTTPClient
 	}
-	ks, err := jwk.FetchHTTPWithContext(ctx, jwkurl, opts...)
+	err := cl.Get(ctx, jwkurl, &ks)
 	if err == nil {
 		err = validateKeys(ks.Keys...)
 	}

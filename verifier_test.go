@@ -25,7 +25,7 @@ func TestVerifier(t *testing.T) {
 		vid := &otgo.OTVID{}
 		vid.ID = td.NewOTID("user", "abc")
 		vid.Issuer = td.OTID()
-		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
+		vid.Audience = td.NewOTID("app", "123")
 		vid.Expiry = time.Now().Add(time.Hour)
 		token, err := vid.Sign(pk)
 		assert.Nil(err)
@@ -37,7 +37,7 @@ func TestVerifier(t *testing.T) {
 		vid = &otgo.OTVID{}
 		vid.ID = td.NewOTID("user", "abc")
 		vid.Issuer = otgo.TrustDomain("localhost1").OTID()
-		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
+		vid.Audience = td.NewOTID("app", "123")
 		vid.Expiry = time.Now().Add(time.Hour)
 		token, err = vid.Sign(pk)
 		assert.Nil(err)
@@ -47,7 +47,7 @@ func TestVerifier(t *testing.T) {
 		vid = &otgo.OTVID{}
 		vid.ID = td.NewOTID("user", "abc")
 		vid.Issuer = td.OTID()
-		vid.Audience = otgo.OTIDs{td.NewOTID("app", "456")}
+		vid.Audience = td.NewOTID("app", "456")
 		vid.Expiry = time.Now().Add(time.Hour)
 		token, err = vid.Sign(pk)
 		assert.Nil(err)

@@ -96,7 +96,7 @@ func (vf *Holder) SignSelf(exp ...time.Duration) (string, error) {
 	vid := &OTVID{}
 	vid.ID = vf.sub
 	vid.Issuer = vf.sub
-	vid.Audience = OTIDs{vf.sub.TrustDomain().OTID()}
+	vid.Audience = vf.sub.TrustDomain().OTID()
 	e := time.Minute * 10
 	if len(exp) > 0 {
 		e = exp[0]
@@ -108,9 +108,7 @@ func (vf *Holder) SignSelf(exp ...time.Duration) (string, error) {
 func (vf *Holder) cacheOTVIDTokens(vids ...OTVID) {
 	vf.mu.Lock()
 	for _, vid := range vids {
-		for _, aud := range vid.Audience {
-			vf.otvidsCache[aud.String()] = &vid
-		}
+		vf.otvidsCache[vid.Audience.String()] = &vid
 	}
 	vf.mu.Unlock()
 }

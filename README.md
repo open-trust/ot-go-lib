@@ -44,7 +44,7 @@ func main() {
 	td := otgo.TrustDomain("ot.example.com")
 	vid.ID = td.NewOTID("user", "tom")
 	vid.Issuer = td.OTID()
-	vid.Audience = otgo.OTIDs{td.NewOTID("svc", "someservice")}
+	vid.Audience = td.NewOTID("svc", "someservice")
 	vid.Expiry = time.Now().Add(time.Minute)
 	token, err := vid.Sign(key)
 	fmt.Println("New OTVID:", string(token))

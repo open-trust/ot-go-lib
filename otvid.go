@@ -18,8 +18,8 @@ type OTVID struct {
 	ID OTID
 	// Issuer is the principal that issued OTVID as present in 'iss' claim
 	Issuer OTID
-	// Audience is the intended recipients of OTVID as present in the 'aud' claim
-	Audience OTIDs
+	// Audience is the intended recipient of OTVID as present in the 'aud' claim
+	Audience OTID
 	// Expiry is the expiration time of OTVID as present in 'exp' claim
 	Expiry time.Time
 	// IssuedAt is the the time at which the OTVID was issued as present in 'iat' claim
@@ -40,7 +40,7 @@ func (o *OTVID) ToJSON() map[string]interface{} {
 	}
 	j["sub"] = o.ID.String()
 	j["iss"] = o.Issuer.String()
-	j["aud"] = o.Audience.Strings()
+	j["aud"] = []string{o.Audience.String()}
 	if !o.IssuedAt.IsZero() {
 		j["iat"] = o.IssuedAt.Unix()
 	}
@@ -63,7 +63,7 @@ func (o *OTVID) from(t jwt.Token) error {
 	if err != nil {
 		return err
 	}
-	o.Audience, err = ParseOTIDs(t.Audience()...)
+	o.Audience, err = ParseOTID(t.Audience()[0]) // TODO
 	if err != nil {
 		return err
 	}
@@ -88,16 +88,13 @@ func (o *OTVID) from(t jwt.Token) error {
 // Validate ...
 func (o *OTVID) Validate() error {
 	if err := o.ID.Validate(); err != nil {
-		return err
+		return fmt.Errorf("sub OTID invalid: %s", err.Error())
 	}
 	if err := o.Issuer.Validate(); err != nil {
-		return err
+		return fmt.Errorf("iss OTID invalid: %s", err.Error())
 	}
 	if err := o.Audience.Validate(); err != nil {
-		return err
-	}
-	if len(o.Audience) == 0 {
-		return errors.New(`otgo.OTVID.Validate: audience not exists`)
+		return fmt.Errorf("aud OTID invalid: %s", err.Error())
 	}
 	return nil
 }
@@ -122,7 +119,7 @@ func (o *OTVID) verifyClaims(issuer, audience OTID) error {
 	if !o.Issuer.Equal(issuer) {
 		return errors.New(`otgo.OTVID.Verify: issuer not satisfied`)
 	}
-	if !o.Audience.Has(audience) {
+	if !o.Audience.Equal(audience) {
 		return errors.New(`otgo.OTVID.Verify: audience not satisfied`)
 	}
 	if !time.Now().Truncate(time.Second).Before(o.Expiry) {
@@ -174,7 +171,7 @@ func (o *OTVID) Sign(key Key) (string, error) {
 	if err = t.Set("iss", o.Issuer.String()); err != nil {
 		return "", err
 	}
-	if err = t.Set("aud", o.Audience.Strings()); err != nil {
+	if err = t.Set("aud", []string{o.Audience.String()}); err != nil {
 		return "", err
 	}
 	if o.ReleaseID != "" {

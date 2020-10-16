@@ -54,7 +54,7 @@ func TestHolder(t *testing.T) {
 		vid := &otgo.OTVID{}
 		vid.ID = td.NewOTID("app", "123")
 		vid.Issuer = td.OTID()
-		vid.Audience = otgo.OTIDs{aud}
+		vid.Audience = aud
 		vid.Expiry = time.Now().Add(time.Hour)
 		token, err := vid.Sign(issPk)
 		assert.Nil(err)
@@ -69,7 +69,7 @@ func TestHolder(t *testing.T) {
 		vid = &otgo.OTVID{}
 		vid.ID = td.NewOTID("user", "abc")
 		vid.Issuer = td.OTID()
-		vid.Audience = otgo.OTIDs{aud}
+		vid.Audience = aud
 		vid.Expiry = time.Now().Add(time.Hour)
 		token, _ = vid.Sign(issPk)
 		err = hd.AddOTVIDTokens(token)
@@ -78,7 +78,7 @@ func TestHolder(t *testing.T) {
 		vid = &otgo.OTVID{}
 		vid.ID = td.NewOTID("app", "123")
 		vid.Issuer = td.OTID()
-		vid.Audience = otgo.OTIDs{aud}
+		vid.Audience = aud
 		vid.Expiry = time.Now().Add(time.Second)
 		token, _ = vid.Sign(issPk)
 		err = hd.AddOTVIDTokens(token)

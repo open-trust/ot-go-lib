@@ -24,7 +24,7 @@ func TestOTVID(t *testing.T) {
 		vid.Issuer = td.OTID()
 		assert.NotNil(vid.Validate())
 
-		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
+		vid.Audience = td.NewOTID("app", "123")
 		assert.Nil(vid.Validate())
 	})
 
@@ -56,7 +56,7 @@ func TestOTVID(t *testing.T) {
 		td := otgo.TrustDomain("localhost")
 		vid.ID = td.NewOTID("user", "abc")
 		vid.Issuer = td.OTID()
-		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
+		vid.Audience = td.NewOTID("app", "123")
 		vid.Claims = map[string]interface{}{"name": "test"}
 		vid.Expiry = time.Now().Add(time.Second * 61)
 
@@ -76,7 +76,7 @@ func TestOTVID(t *testing.T) {
 		td := otgo.TrustDomain("localhost")
 		vid.ID = td.NewOTID("user", "abc")
 		vid.Issuer = td.OTID()
-		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
+		vid.Audience = td.NewOTID("app", "123")
 		vid.Expiry = time.Now().Add(time.Hour)
 
 		keys := otgo.MustKeys(otgo.MustPrivateKey("ES256"))
@@ -106,7 +106,7 @@ func TestOTVID(t *testing.T) {
 			vid := &otgo.OTVID{}
 			vid.ID = td.NewOTID("user", "abc")
 			vid.Issuer = td.OTID()
-			vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
+			vid.Audience = td.NewOTID("app", "123")
 			vid.Expiry = time.Now().Add(time.Hour)
 
 			key := otgo.MustPrivateKey(string(alg))
@@ -125,7 +125,7 @@ func TestOTVID(t *testing.T) {
 		td := otgo.TrustDomain("localhost")
 		vid.ID = td.NewOTID("user", "abc")
 		vid.Issuer = td.OTID()
-		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
+		vid.Audience = td.NewOTID("app", "123")
 		vid.Expiry = time.Now().Add(time.Hour)
 		vid.ReleaseID = "123456789"
 		vid.Claims["name"] = "test"
@@ -141,7 +141,7 @@ func TestOTVID(t *testing.T) {
 		token, err := vid.Sign(key)
 		assert.Nil(err)
 
-		vid2, err := otgo.ParseOTVID(token, pubKeys, vid.Issuer, vid.Audience[0])
+		vid2, err := otgo.ParseOTVID(token, pubKeys, vid.Issuer, vid.Audience)
 		assert.Nil(err)
 		assert.True(vid2.ID.Equal(vid.ID))
 		assert.True(vid2.IssuedAt.Equal(vid.IssuedAt))
@@ -149,16 +149,16 @@ func TestOTVID(t *testing.T) {
 		assert.Equal("123456789", vid2.Claims["rid"].(string))
 		assert.Equal("test", vid2.Claims["name"].(string))
 
-		_, err = otgo.ParseOTVID(token, pubKeys2, vid.Issuer, vid.Audience[0])
+		_, err = otgo.ParseOTVID(token, pubKeys2, vid.Issuer, vid.Audience)
 		assert.NotNil(err)
 
-		_, err = otgo.ParseOTVID(token[:len(token)-2], pubKeys, vid.Issuer, vid.Audience[0])
+		_, err = otgo.ParseOTVID(token[:len(token)-2], pubKeys, vid.Issuer, vid.Audience)
 		assert.NotNil(err)
 
 		_, err = otgo.ParseOTVID(token, pubKeys, vid.Issuer, vid.Issuer)
 		assert.NotNil(err)
 
-		_, err = otgo.ParseOTVID(token, pubKeys2, vid.ID, vid.Audience[0])
+		_, err = otgo.ParseOTVID(token, pubKeys2, vid.ID, vid.Audience)
 		assert.NotNil(err)
 	})
 
@@ -169,7 +169,7 @@ func TestOTVID(t *testing.T) {
 		td := otgo.TrustDomain("localhost")
 		vid.ID = td.NewOTID("user", "abc")
 		vid.Issuer = td.OTID()
-		vid.Audience = otgo.OTIDs{td.NewOTID("app", "123")}
+		vid.Audience = td.NewOTID("app", "123")
 		vid.Expiry = time.Now().Add(time.Hour)
 		vid.Claims = map[string]interface{}{"rid": 12345, "sub": "123"}
 
@@ -201,9 +201,9 @@ func TestOTVID(t *testing.T) {
 		assert.True(vid2.ID.Equal(vid.ID))
 		assert.True(vid2.IssuedAt.Equal(vid.IssuedAt))
 		assert.Equal("12345", vid2.Claims["rid"])
-		assert.Nil(vid2.Verify(pubKeys, vid.Issuer, vid.Audience[0]))
-		assert.NotNil(vid2.Verify(pubKeys2, vid.Issuer, vid.Audience[0]))
-		assert.NotNil(vid2.Verify(pubKeys2, vid.ID, vid.Audience[0]))
+		assert.Nil(vid2.Verify(pubKeys, vid.Issuer, vid.Audience))
+		assert.NotNil(vid2.Verify(pubKeys2, vid.Issuer, vid.Audience))
+		assert.NotNil(vid2.Verify(pubKeys2, vid.ID, vid.Audience))
 		assert.NotNil(vid2.Verify(pubKeys2, vid.Issuer, vid.ID))
 	})
 }

@@ -207,7 +207,7 @@ func (c *signCmd) sign() error {
 			vid := otgo.OTVID{
 				ID:       ids[0],
 				Issuer:   ids[1],
-				Audience: otgo.OTIDs{ids[2]},
+				Audience: ids[2],
 				Expiry:   time.Now().UTC().Add(c.exp).Truncate(time.Second),
 			}
 
@@ -298,7 +298,7 @@ func (c *verifyCmd) verify(ctx context.Context, token string) error {
 			}
 		}
 		if err == nil {
-			err = vid.Verify(ks, vid.Issuer, vid.Audience[0])
+			err = vid.Verify(ks, vid.Issuer, vid.Audience)
 			if err == nil {
 				fmt.Fprintln(c.ioOut, fmt.Sprintf("\nVerify success!"))
 			} else {

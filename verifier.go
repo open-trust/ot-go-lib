@@ -88,7 +88,7 @@ func (vf *Verifier) refreshKeys(ctx context.Context) {
 }
 
 func (vf *Verifier) fetchKeys(ctx context.Context) error {
-	ks, err := FetchKeys(ctx, vf.td.VerifyURL(), HTTPClient)
+	ks, err := FetchKeys(ctx, vf.td.VerifyURL(), nil)
 	if err == nil && len(ks.Keys) > 0 {
 		vf.SetKeys(*ks)
 	}
