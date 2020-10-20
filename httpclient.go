@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -29,8 +30,22 @@ var tr = &http.Transport{
 
 // HTTPClient ...
 type HTTPClient struct {
-	client *http.Client
-	header http.Header
+	client   *http.Client
+	header   http.Header
+	testHost string
+}
+
+// Response ...
+type Response struct {
+	Error  interface{} `json:"error"`
+	Result interface{} `json:"result"`
+}
+
+// NewTestClient ...
+func NewTestClient(host string) *HTTPClient {
+	cli := NewHTTPClient(nil)
+	cli.testHost = host
+	return cli
 }
 
 // NewHTTPClient ...
@@ -66,17 +81,17 @@ func (c *HTTPClient) WithToken(token string) *HTTPClient {
 }
 
 // Get ...
-func (c *HTTPClient) Get(ctx context.Context, url string, output interface{}) error {
-	return c.Do(ctx, "GET", url, nil, nil, output)
+func (c *HTTPClient) Get(ctx context.Context, api string, output interface{}) error {
+	return c.Do(ctx, "GET", api, nil, nil, output)
 }
 
 // Post ...
-func (c *HTTPClient) Post(ctx context.Context, url string, input, output interface{}) error {
-	return c.Do(ctx, "POST", url, nil, input, output)
+func (c *HTTPClient) Post(ctx context.Context, api string, input, output interface{}) error {
+	return c.Do(ctx, "POST", api, nil, input, output)
 }
 
 // Do ...
-func (c *HTTPClient) Do(ctx context.Context, method, url string, header http.Header, input, output interface{}) error {
+func (c *HTTPClient) Do(ctx context.Context, method, api string, header http.Header, input, output interface{}) error {
 	err := ctx.Err()
 	if err != nil {
 		return fmt.Errorf("context.Context error: %v", err)
@@ -89,7 +104,15 @@ func (c *HTTPClient) Do(ctx context.Context, method, url string, header http.Hea
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, url, &b)
+	if c.testHost != "" {
+		u, err := url.Parse(api)
+		if err != nil {
+			return err
+		}
+		api = c.testHost + u.RequestURI() // override URL for testing
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, api, &b)
 	if err != nil {
 		return fmt.Errorf("create http request error: %v", err)
 	}
@@ -115,15 +138,18 @@ func (c *HTTPClient) Do(ctx context.Context, method, url string, header http.Hea
 	}
 	data, err := ioutil.ReadAll(body)
 	if err != nil {
-		return fmt.Errorf("read response body error: %s", err.Error())
+		return fmt.Errorf("read response error: %s, status code: %v", err.Error(), resp.StatusCode)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server returned a non-200 status code: %v, with response: %s",
-			resp.StatusCode, string(data))
+	if output != nil {
+		if err := json.Unmarshal(data, output); err != nil {
+			return fmt.Errorf("decoding json error: %s, status code: %v, response: %s", err.Error(), resp.StatusCode, string(data))
+		}
 	}
-	if err := json.Unmarshal(data, output); err != nil {
-		return fmt.Errorf("decoding json error: %s, data: %s", err.Error(), string(data))
+
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("server returned a non-success, status code: %v, response: %s",
+			resp.StatusCode, string(data))
 	}
 	return nil
 }

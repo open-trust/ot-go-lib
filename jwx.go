@@ -12,62 +12,92 @@ import (
 
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/lestrrat-go/jwx/jwt"
 )
 
-// Keys ...
-type Keys = jwk.Set
+// JWKSet ...
+type JWKSet = jwk.Set
 
 // Key ...
 type Key = jwk.Key
 
-// ParseKey ...
-func ParseKey(s string) (Key, error) {
-	k, err := jwk.ParseKey([]byte(s))
-	if err == nil {
-		err = validateKeys(k)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return k, nil
+// Token ...
+type Token = jwt.Token
+
+// NewToken ...
+func NewToken() Token {
+	return jwt.New()
 }
 
 // ParseKeys ...
-func ParseKeys(ss ...string) (*Keys, error) {
+func ParseKeys(bs ...[]byte) ([]Key, error) {
+	keys := make([]Key, 0, len(bs))
+	for _, b := range bs {
+		k, err := jwk.ParseKey(b)
+		if err == nil {
+			err = validateKeys(k)
+		}
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
+// ParseKey ...
+func ParseKey(s string) (Key, error) {
+	keys, err := ParseKeys([]byte(s))
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) != 1 {
+		return nil, errors.New("no keys found")
+	}
+	return keys[0], nil
+}
+
+// ParseSet ...
+func ParseSet(ss ...string) (*JWKSet, error) {
 	if len(ss) == 0 {
-		return nil, errors.New("otgo.ParseKeys: keys string is empty")
+		return nil, errors.New("otgo.ParseSet: empty string")
 	}
 
+	ks := &JWKSet{}
 	if strings.Contains(ss[0], `"keys"`) {
-		ks, err := jwk.ParseString(ss[0])
+		k, err := jwk.ParseString(ss[0])
 		if err == nil {
 			err = validateKeys(ks.Keys...)
 		}
 		if err != nil {
 			return nil, err
 		}
-		return ks, nil
-	}
-
-	ks := &jwk.Set{}
-	for _, s := range ss {
-		key, err := ParseKey(s)
+		ks.Keys = k.Keys
+	} else {
+		bs := make([][]byte, 0, len(ss))
+		for _, s := range ss {
+			bs = append(bs, []byte(s))
+		}
+		keys, err := ParseKeys(bs...)
 		if err != nil {
 			return nil, err
 		}
-		ks.Keys = append(ks.Keys, key)
+		ks.Keys = keys
+	}
+	if len(ks.Keys) == 0 {
+		return nil, errors.New("otgo.ParseSet: no keys found")
 	}
 
 	return ks, nil
 }
 
 // FetchKeys ...
-func FetchKeys(ctx context.Context, jwkurl string, cl *HTTPClient) (*Keys, error) {
+func FetchKeys(ctx context.Context, jwkurl string, cli *HTTPClient) (*JWKSet, error) {
 	ks := &jwk.Set{}
-	if cl == nil {
-		cl = DefaultHTTPClient
+	if cli == nil {
+		cli = DefaultHTTPClient
 	}
-	err := cl.Get(ctx, jwkurl, &ks)
+	err := cli.Get(ctx, jwkurl, &ks)
 	if err == nil {
 		err = validateKeys(ks.Keys...)
 	}
@@ -78,7 +108,7 @@ func FetchKeys(ctx context.Context, jwkurl string, cl *HTTPClient) (*Keys, error
 }
 
 // NewKeys ...
-func NewKeys(keys ...Key) (*Keys, error) {
+func NewKeys(keys ...Key) (*JWKSet, error) {
 	if err := validateKeys(keys...); err != nil {
 		return nil, err
 	}
@@ -86,7 +116,7 @@ func NewKeys(keys ...Key) (*Keys, error) {
 }
 
 // MustKeys ...
-func MustKeys(keys ...Key) *Keys {
+func MustKeys(keys ...Key) *JWKSet {
 	ks, err := NewKeys(keys...)
 	if err != nil {
 		panic(err)
@@ -123,7 +153,7 @@ func ToPublicKey(k Key) (Key, error) {
 }
 
 // LookupPublicKeys ...
-func LookupPublicKeys(ks *Keys) *Keys {
+func LookupPublicKeys(ks *JWKSet) *JWKSet {
 	rs := &jwk.Set{Keys: make([]Key, 0)}
 	if ks != nil {
 		for _, k := range ks.Keys {
@@ -136,9 +166,9 @@ func LookupPublicKeys(ks *Keys) *Keys {
 }
 
 // LookupSigningKey ...
-func LookupSigningKey(ks *Keys) (Key, error) {
+func LookupSigningKey(ks *JWKSet) (Key, error) {
 	if ks == nil || len(ks.Keys) == 0 {
-		return nil, errors.New("otgo.LookupSigningKey: no keys exists")
+		return nil, errors.New("otgo.LookupSigningKey: no private keys exists")
 	}
 	key := ks.Keys[0]
 	if len(ks.Keys) > 1 {

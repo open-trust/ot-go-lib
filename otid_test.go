@@ -87,7 +87,7 @@ func TestTrustDomain(t *testing.T) {
 		assert := assert.New(t)
 
 		td := otgo.TrustDomain("ot.example.com")
-		assert.Equal("https://ot.example.com/.well-known/open-trust-configuration", td.VerifyURL())
+		assert.Equal("https://ot.example.com/.well-known/open-trust-configuration", td.ConfigURL())
 	})
 
 	t.Run("TrustDomain.OTID method", func(t *testing.T) {

@@ -28,8 +28,8 @@ func (td TrustDomain) String() string {
 	return string(td)
 }
 
-// VerifyURL returns the Open Trust Authority verify URL for the trust domain, e.g. https://example.org/.well-known/open-trust-configuration.
-func (td TrustDomain) VerifyURL() string {
+// ConfigURL returns the Open Trust Authority URL for for retrieving configuration information, e.g. https://example.org/.well-known/open-trust-configuration.
+func (td TrustDomain) ConfigURL() string {
 	return fmt.Sprintf("https://%s/.well-known/open-trust-configuration", td)
 }
 

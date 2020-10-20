@@ -48,8 +48,8 @@ func TestHTTPClient(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(200)
 			m := map[string]string{}
-			for k, _ := range r.Header {
-				m[k] = r.Header.Get(k)
+			for k, v := range r.Header {
+				m[k] = v[0]
 			}
 			b, err := json.Marshal(m)
 			if err != nil {

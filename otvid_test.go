@@ -49,7 +49,7 @@ func TestOTVID(t *testing.T) {
 		assert.False(vid.ShouldRenew())
 	})
 
-	t.Run("OTVID.ToJSON method", func(t *testing.T) {
+	t.Run("OTVID.ToJWT method", func(t *testing.T) {
 		assert := assert.New(t)
 
 		vid := &otgo.OTVID{}
@@ -60,13 +60,13 @@ func TestOTVID(t *testing.T) {
 		vid.Claims = map[string]interface{}{"name": "test"}
 		vid.Expiry = time.Now().Add(time.Second * 61)
 
-		json := vid.ToJSON()
-		assert.Equal(map[string]interface{}{
-			"sub":  "otid:localhost:user:abc",
-			"iss":  "otid:localhost",
-			"aud":  []string{"otid:localhost:app:123"},
-			"name": "test",
-			"exp":  vid.Expiry.Unix()}, json)
+		token, err := vid.ToJWT()
+		assert.Nil(err)
+		assert.Equal("otid:localhost:user:abc", token.Subject())
+		assert.Equal("otid:localhost", token.Issuer())
+		assert.Equal([]string{"otid:localhost:app:123"}, token.Audience())
+		assert.True(vid.Expiry.Equal(token.Expiration()))
+		assert.Equal("test", token.PrivateClaims()["name"].(string))
 	})
 
 	t.Run("OTVID.Sign & OTVID.Verify method", func(t *testing.T) {
@@ -101,7 +101,7 @@ func TestOTVID(t *testing.T) {
 		assert.NotNil(vid.Verify(pubKeys, otgo.TrustDomain("localhost1").OTID(), td.NewOTID("app", "123")))
 
 		algs := []jwa.SignatureAlgorithm{jwa.RS256, jwa.RS384, jwa.RS512, jwa.ES256, jwa.ES384, jwa.ES512, jwa.PS256, jwa.PS384, jwa.PS512}
-		pubKeys = &otgo.Keys{}
+		pubKeys = &otgo.JWKSet{}
 		for _, alg := range algs {
 			vid := &otgo.OTVID{}
 			vid.ID = td.NewOTID("user", "abc")

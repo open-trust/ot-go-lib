@@ -32,57 +32,36 @@ type OTVID struct {
 	token string
 }
 
-// ToJSON returns a map[string]interface{} value represented as JWT.
-func (o *OTVID) ToJSON() map[string]interface{} {
-	j := make(map[string]interface{})
-	for k, v := range o.Claims {
-		j[k] = v
-	}
-	j["sub"] = o.ID.String()
-	j["iss"] = o.Issuer.String()
-	j["aud"] = []string{o.Audience.String()}
-	if !o.IssuedAt.IsZero() {
-		j["iat"] = o.IssuedAt.Unix()
-	}
-	if !o.Expiry.IsZero() {
-		j["exp"] = o.Expiry.Unix()
-	}
-	if o.ReleaseID != "" {
-		j["rid"] = o.ReleaseID
-	}
-	return j
-}
-
-func (o *OTVID) from(t jwt.Token) error {
+// ToJWT returns a JWT from OTVID.
+func (o *OTVID) ToJWT() (Token, error) {
 	var err error
-	o.ID, err = ParseOTID(t.Subject())
-	if err != nil {
-		return err
-	}
-	o.Issuer, err = ParseOTID(t.Issuer())
-	if err != nil {
-		return err
-	}
-	o.Audience, err = ParseOTID(t.Audience()[0]) // TODO
-	if err != nil {
-		return err
-	}
-
-	if rid, ok := t.Get("rid"); ok {
-		if o.ReleaseID, ok = rid.(string); !ok {
-			return fmt.Errorf("invalid 'rid' field, must be a string")
+	t := jwt.New()
+	for key, val := range o.Claims {
+		if err = t.Set(key, val); err != nil {
+			return t, err
 		}
 	}
-
-	o.Expiry = t.Expiration()
-	o.IssuedAt = t.IssuedAt()
-	o.Claims = t.PrivateClaims()
-	o.Claims["sub"] = t.Subject()
-	o.Claims["iss"] = t.Issuer()
-	o.Claims["aud"] = t.Audience()
-	o.Claims["ext"] = t.Expiration()
-	o.Claims["iat"] = t.IssuedAt()
-	return nil
+	if err = t.Set("sub", o.ID.String()); err != nil {
+		return t, err
+	}
+	if err = t.Set("iss", o.Issuer.String()); err != nil {
+		return t, err
+	}
+	if err = t.Set("aud", []string{o.Audience.String()}); err != nil {
+		return t, err
+	}
+	if err = t.Set("iat", o.IssuedAt); err != nil {
+		return t, err
+	}
+	if err = t.Set("exp", o.Expiry); err != nil {
+		return t, err
+	}
+	if o.ReleaseID != "" {
+		if err = t.Set("rid", o.ReleaseID); err != nil {
+			return t, err
+		}
+	}
+	return t, nil
 }
 
 // Validate ...
@@ -100,7 +79,7 @@ func (o *OTVID) Validate() error {
 }
 
 // Verify ...
-func (o *OTVID) Verify(keys *Keys, issuer, audience OTID) error {
+func (o *OTVID) Verify(ks *JWKSet, issuer, audience OTID) error {
 	err := o.Validate()
 	if err != nil {
 		return err
@@ -108,10 +87,10 @@ func (o *OTVID) Verify(keys *Keys, issuer, audience OTID) error {
 	if err = o.verifyClaims(issuer, audience); err != nil {
 		return err
 	}
-	if keys == nil {
+	if ks == nil {
 		return fmt.Errorf("otgo.OTVID.Verify: public keys required")
 	}
-	_, err = jwt.ParseString(o.token, jwt.WithKeySet(keys))
+	_, err = jwt.ParseString(o.token, jwt.WithKeySet(ks))
 	return err
 }
 
@@ -140,17 +119,17 @@ func (o *OTVID) MaybeRevoked() bool {
 
 // ShouldRenew ...
 func (o *OTVID) ShouldRenew() bool {
-	return time.Now().Add(time.Second * 60).After(o.Expiry)
+	return time.Now().Add(time.Second * 10).After(o.Expiry)
 }
 
 // Sign ...
 func (o *OTVID) Sign(key Key) (string, error) {
 	var err error
+	var t Token
 	if err = validateKeys(key); err != nil {
 		return "", err
 	}
 
-	t := jwt.New()
 	hdrs := jws.NewHeaders()
 	alg := key.Algorithm()
 	if err = hdrs.Set("alg", alg); err != nil {
@@ -160,37 +139,13 @@ func (o *OTVID) Sign(key Key) (string, error) {
 		return "", err
 	}
 
-	for key, val := range o.Claims {
-		if err = t.Set(key, val); err != nil {
-			return "", err
-		}
-	}
-	if err = t.Set("sub", o.ID.String()); err != nil {
-		return "", err
-	}
-	if err = t.Set("iss", o.Issuer.String()); err != nil {
-		return "", err
-	}
-	if err = t.Set("aud", []string{o.Audience.String()}); err != nil {
-		return "", err
-	}
-	if o.ReleaseID != "" {
-		if err = t.Set("rid", o.ReleaseID); err != nil {
-			return "", err
-		}
-	}
-
 	o.IssuedAt = time.Now().UTC().Truncate(time.Second)
-	if err = t.Set("iat", o.IssuedAt); err != nil {
-		return "", err
-	}
-	if o.Expiry.IsZero() {
+	if o.Expiry.Unix() <= 0 {
 		o.Expiry = o.IssuedAt.Add(time.Minute * 10)
 	}
-	if err = t.Set("exp", o.Expiry); err != nil {
+	if t, err = o.ToJWT(); err != nil {
 		return "", err
 	}
-
 	s, err := jwt.Sign(t, jwa.SignatureAlgorithm(alg), key, jwt.WithHeaders(hdrs))
 	if err != nil {
 		return "", err
@@ -202,24 +157,54 @@ func (o *OTVID) Sign(key Key) (string, error) {
 	return o.token, nil
 }
 
-// ParseOTVID parses a OTVID from a serialized JWT token.
-// The OTVID signature is verified using the JWK set.
-func ParseOTVID(token string, keys *Keys, issuer, audience OTID) (*OTVID, error) {
-	if l := len(token); l < 64 || l > 2048 {
-		return nil, fmt.Errorf("invalid OTVID token with length %d", l)
+// FromJWT returns a OTVID from a JWT token
+func FromJWT(token string, t Token) (*OTVID, error) {
+	var err error
+
+	vid := &OTVID{token: token}
+	vid.ID, err = ParseOTID(t.Subject())
+	if err == nil {
+		vid.Issuer, err = ParseOTID(t.Issuer())
 	}
-	if keys == nil {
-		return nil, fmt.Errorf("otgo.ParseOTVID: public keys required")
+	if err == nil {
+		if as := t.Audience(); len(as) > 0 {
+			vid.Audience, err = ParseOTID(as[0])
+		}
 	}
-	t, err := jwt.ParseString(token, jwt.WithKeySet(keys))
+	if err == nil {
+		if rid, ok := t.Get("rid"); ok {
+			if vid.ReleaseID, ok = rid.(string); !ok {
+				return nil, fmt.Errorf("invalid 'rid' field, must be a string")
+			}
+		}
+	}
+	if err == nil {
+		vid.Expiry = t.Expiration()
+		vid.IssuedAt = t.IssuedAt()
+		vid.Claims = t.PrivateClaims()
+		err = vid.Validate()
+	}
 	if err != nil {
 		return nil, err
 	}
-	vid := &OTVID{token: token}
-	if err = vid.from(t); err != nil {
+	return vid, nil
+}
+
+// ParseOTVID parses a OTVID from a serialized JWT token.
+// The OTVID signature is verified using the JWK set.
+func ParseOTVID(token string, ks *JWKSet, issuer, audience OTID) (*OTVID, error) {
+	if l := len(token); l < 64 || l > 2048 {
+		return nil, fmt.Errorf("invalid OTVID token with length %d", l)
+	}
+	if ks == nil {
+		return nil, fmt.Errorf("otgo.ParseOTVID: public keys required")
+	}
+	t, err := jwt.ParseString(token, jwt.WithKeySet(ks))
+	if err != nil {
 		return nil, err
 	}
-	if err = vid.Validate(); err != nil {
+	vid, err := FromJWT(token, t)
+	if err != nil {
 		return nil, err
 	}
 	if err = vid.verifyClaims(issuer, audience); err != nil {
@@ -238,11 +223,8 @@ func ParseOTVIDInsecure(token string) (*OTVID, error) {
 	if err != nil {
 		return nil, err
 	}
-	vid := &OTVID{token: token}
-	if err = vid.from(t); err != nil {
-		return nil, err
-	}
-	if err = vid.Validate(); err != nil {
+	vid, err := FromJWT(token, t)
+	if err != nil {
 		return nil, err
 	}
 	return vid, nil

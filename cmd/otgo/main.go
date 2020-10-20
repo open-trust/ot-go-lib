@@ -270,7 +270,7 @@ func (c *verifyCmd) Execute(ctx context.Context, f *flag.FlagSet, _ ...interface
 func (c *verifyCmd) verify(ctx context.Context, token string) error {
 	s := c.jwk
 	var err error
-	var ks *otgo.Keys
+	var ks *otgo.JWKSet
 	if strings.HasPrefix(s, "http") {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -285,7 +285,7 @@ func (c *verifyCmd) verify(ctx context.Context, token string) error {
 			s = string(b)
 		}
 
-		ks, err = otgo.ParseKeys(s)
+		ks, err = otgo.ParseSet(s)
 	}
 
 	if err == nil {

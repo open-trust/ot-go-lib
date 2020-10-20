@@ -52,7 +52,7 @@ func TestJWX(t *testing.T) {
 		assert.NotNil(err)
 	})
 
-	t.Run("ParseKeys func", func(t *testing.T) {
+	t.Run("ParseSet func", func(t *testing.T) {
 		assert := assert.New(t)
 
 		priKeys := otgo.MustKeys(otgo.MustPrivateKey("RS256"), otgo.MustPrivateKey("PS256"), otgo.MustPrivateKey("ES256"))
@@ -61,7 +61,7 @@ func TestJWX(t *testing.T) {
 		pubKeys := otgo.LookupPublicKeys(priKeys)
 		pubS := mustMarshal(pubKeys)
 
-		keys, err := otgo.ParseKeys(priS)
+		keys, err := otgo.ParseSet(priS)
 		assert.Nil(err)
 		assert.Equal(len(priKeys.Keys), len(keys.Keys))
 
@@ -70,7 +70,7 @@ func TestJWX(t *testing.T) {
 			assert.Equal(pubKeys.Keys[i].KeyID(), key.KeyID())
 		}
 
-		keys, err = otgo.ParseKeys(pubS)
+		keys, err = otgo.ParseSet(pubS)
 		assert.Nil(err)
 		assert.Equal(len(pubKeys.Keys), len(keys.Keys))
 
@@ -80,7 +80,7 @@ func TestJWX(t *testing.T) {
 
 		priKey1 := otgo.MustPrivateKey("PS256")
 		priKey2 := otgo.MustPrivateKey("ES256")
-		keys, err = otgo.ParseKeys(mustMarshal(priKey1), mustMarshal(priKey2))
+		keys, err = otgo.ParseSet(mustMarshal(priKey1), mustMarshal(priKey2))
 		assert.Nil(err)
 		assert.Equal(2, len(keys.Keys))
 		assert.Equal(keys.Keys[0].KeyID(), priKey1.KeyID())
