@@ -133,11 +133,11 @@ func (ot *OTClient) SignSelf(exp ...time.Duration) (string, error) {
 
 // SignInput ...
 type SignInput struct {
-	Subject  OTID                   `json:"sub"`   // 申请签发 OTVID 的 sub，可以是联盟信任域的 sub
-	Audience OTID                   `json:"aud"`   // 申请签发 OTVID 的 aud，可以是联盟信任域的 aud
-	OTVID    string                 `json:"otvid"` // 请求主体与 sub 不一致则是代理申请，且请求主体不是联盟域，需要 sub 的自签发 OTVID
-	Expiry   int64                  `json:"exp"`
-	Claims   map[string]interface{} `json:"claims"` // 需要包含的其它签发数据
+	Subject        OTID                   `json:"sub"` // 申请签发 OTVID 的 sub，可以是联盟信任域的 sub
+	Audience       OTID                   `json:"aud"` // 申请签发 OTVID 的 aud，可以是联盟信任域的 aud
+	Expiry         int64                  `json:"exp"`
+	Claims         map[string]interface{} `json:"claims"`         // 需要包含的其它签发数据
+	ForwardedOTVID string                 `json:"forwardedOtvid"` // 请求主体与 sub 不一致则是代理申请，且请求主体不是联盟域，需要 sub 的自签发 OTVID
 }
 
 type signOutput struct {
