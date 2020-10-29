@@ -17,34 +17,24 @@ func TestOTClient(t *testing.T) {
 		assert := assert.New(t)
 
 		td := otgo.TrustDomain("localhost")
-		cli, err := otgo.NewOTClient(context.Background(), td.NewOTID("app", ""))
-		assert.NotNil(err)
-		assert.Nil(cli)
-
-		cli, err = otgo.NewOTClient(context.Background(), td.NewOTID("app", "123"))
-		assert.Nil(err)
-		assert.NotNil(cli)
+		assert.Panics(func() { otgo.NewOTClient(context.Background(), td.NewOTID("app", "")) })
 	})
 
-	t.Run("OTClient.GetToken & OTClient.AddTokens method", func(t *testing.T) {
+	t.Run("OTClient.AddAudience & ServiceClient.Resolve method", func(t *testing.T) {
 		assert := assert.New(t)
 
 		td := otgo.TrustDomain("localhost")
-		cli, err := otgo.NewOTClient(context.Background(), td.NewOTID("app", "123"))
-		assert.Nil(err)
+		cli := otgo.NewOTClient(context.Background(), td.NewOTID("app", "123"))
 
 		var aud otgo.OTID
-		_, err = cli.GetToken(context.Background(), aud)
-		assert.NotNil(err)
-		assert.Contains(err.Error(), "invalid audience OTVID")
+		assert.Panics(func() { cli.ServiceClient(aud) })
 
 		aud = otgo.OTID{}
-		_, err = cli.GetToken(context.Background(), aud)
-		assert.NotNil(err)
-		assert.Contains(err.Error(), "invalid audience OTVID")
+		assert.Panics(func() { cli.ServiceClient(aud) })
 
 		aud = td.NewOTID("svc", "tester")
-		_, err = cli.GetToken(context.Background(), aud)
+		scli := cli.ServiceClient(aud)
+		_, _, err := scli.Resolve(context.Background())
 		assert.NotNil(err)
 
 		pk := otgo.MustPrivateKey("ES256")
@@ -56,12 +46,14 @@ func TestOTClient(t *testing.T) {
 		token, err := vid.Sign(pk)
 		assert.Nil(err)
 
-		err = cli.AddTokens(token)
+		serviceEndpoint := "http://localhost:1234"
+		err = cli.AddAudience(token, serviceEndpoint)
 		assert.Nil(err)
 
-		token2, err := cli.GetToken(context.Background(), aud)
+		token2, endpoint, err := scli.Resolve(context.Background())
 		assert.Nil(err)
 		assert.Equal(token, token2)
+		assert.Equal(serviceEndpoint, endpoint)
 
 		vid = &otgo.OTVID{}
 		vid.ID = td.NewOTID("user", "abc")
@@ -69,7 +61,7 @@ func TestOTClient(t *testing.T) {
 		vid.Audience = aud
 		vid.Expiry = time.Now().Add(time.Hour)
 		token, _ = vid.Sign(pk)
-		err = cli.AddTokens(token)
+		err = cli.AddAudience(token, serviceEndpoint)
 		assert.NotNil(err)
 
 		vid = &otgo.OTVID{}
@@ -78,7 +70,7 @@ func TestOTClient(t *testing.T) {
 		vid.Audience = aud
 		vid.Expiry = time.Now().Add(time.Second)
 		token, _ = vid.Sign(pk)
-		err = cli.AddTokens(token)
+		err = cli.AddAudience(token, serviceEndpoint)
 		assert.NotNil(err)
 	})
 
@@ -88,8 +80,7 @@ func TestOTClient(t *testing.T) {
 		td := otgo.TrustDomain("localhost")
 		sub := td.NewOTID("app", "123")
 		pk := otgo.MustPrivateKey("ES256")
-		cli, err := otgo.NewOTClient(context.Background(), sub)
-		assert.Nil(err)
+		cli := otgo.NewOTClient(context.Background(), sub)
 
 		token, err := cli.SignSelf()
 		assert.NotNil(err)
@@ -135,14 +126,13 @@ func TestOTClient(t *testing.T) {
 
 		td := otgo.TrustDomain("localhost")
 		sub := td.NewOTID("app", "123")
-		cli, err := otgo.NewOTClient(context.Background(), sub)
-		assert.Nil(err)
-		cli.SetHTTPClient(otgo.NewTestClient(ts.URL))
+		cli := otgo.NewOTClient(context.Background(), sub)
+		cli.HTTPClient.(*otgo.Client).Endpoint = ts.URL
 
 		cfg := cli.Config()
 		assert.Equal("", cfg.ServiceEndpoint)
 
-		err = cli.LoadConfig()
+		err := cli.LoadConfig()
 		assert.Nil(err)
 		cfg = cli.Config()
 
@@ -172,7 +162,7 @@ func TestOTClient(t *testing.T) {
 			`))
 		}))
 		defer ts.Close()
-		cli.SetHTTPClient(otgo.NewTestClient(ts.URL))
+		cli.HTTPClient.(*otgo.Client).Endpoint = ts.URL
 		err = cli.LoadConfig()
 		assert.NotNil(err)
 	})
@@ -214,11 +204,10 @@ func TestOTClient(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		cli, err := otgo.NewOTClient(context.Background(), appVid.ID)
-		assert.Nil(err)
-		cli.SetTestHost(ts.URL)
+		cli := otgo.NewOTClient(context.Background(), vid.Audience)
+		cli.HTTPClient.(*otgo.Client).Endpoint = ts.URL
+		assert.Nil(cli.AddAudience(appToken, ts.URL))
 		cli.SetPrivateKeys(*otgo.MustKeys(otgo.MustPrivateKey("ES256")))
-		assert.Nil(cli.AddTokens(appToken))
 
 		parsedVid, err := cli.Verify(context.Background(), token)
 		assert.Nil(err)
@@ -234,8 +223,7 @@ func TestOTClient(t *testing.T) {
 
 		td := otgo.TrustDomain("localhost")
 		pk := otgo.MustPrivateKey("ES256")
-		cli, err := otgo.NewOTClient(context.Background(), td.NewOTID("app", "123"))
-		assert.Nil(err)
+		cli := otgo.NewOTClient(context.Background(), td.NewOTID("app", "123"))
 
 		vid := &otgo.OTVID{}
 		vid.ID = td.NewOTID("user", "abc")

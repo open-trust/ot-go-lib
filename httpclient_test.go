@@ -31,12 +31,12 @@ func TestHTTPClient(t *testing.T) {
 		defer ts.Close()
 
 		res := map[string]string{}
-		err := otgo.DefaultHTTPClient.Get(context.Background(), ts.URL, &res)
+		err := otgo.DefaultHTTPClient.Do(context.Background(), "GET", ts.URL, nil, nil, &res)
 		assert.Nil(err)
 		assert.Equal("ok", res["result"])
 
 		res = map[string]string{}
-		err = otgo.DefaultHTTPClient.Post(context.Background(), ts.URL, map[string]string{"result": "OK"}, &res)
+		err = otgo.DefaultHTTPClient.Do(context.Background(), "POST", ts.URL, nil, map[string]string{"result": "OK"}, &res)
 		assert.Nil(err)
 		assert.Equal("OK", res["result"])
 	})
@@ -59,17 +59,16 @@ func TestHTTPClient(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		cli := otgo.DefaultHTTPClient.WithUA("UA123")
-		assert.True(cli != otgo.DefaultHTTPClient)
+		cli := otgo.DefaultHTTPClient
 
 		res := map[string]string{}
-		err := cli.Get(context.Background(), ts.URL, &res)
+		cli.Header.Set("User-Agent", "UA123")
+		err := cli.Do(context.Background(), "GET", ts.URL, nil, nil, &res)
 		assert.Nil(err)
 		assert.Equal("UA123", res["User-Agent"])
 
-		cli = cli.WithToken("token456")
 		res = map[string]string{}
-		err = cli.Get(context.Background(), ts.URL, &res)
+		err = cli.Do(context.Background(), "GET", ts.URL, otgo.AddTokenToHeader(http.Header{}, "token456"), nil, &res)
 		assert.Nil(err)
 		assert.Equal("UA123", res["User-Agent"])
 		assert.Equal("Bearer token456", res["Authorization"])

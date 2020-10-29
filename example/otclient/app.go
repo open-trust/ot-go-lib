@@ -24,26 +24,24 @@ func main() {
 		panic(err)
 	}
 
-	cli, err := otgo.NewOTClient(context.Background(), agent)
-	if err != nil {
-		panic(err)
-	}
-	cli.SetHTTPClient(otgo.NewTestClient("http://localhost:8081").WithUA("ot-go-lib"))
+	cli := otgo.NewOTClient(context.Background(), agent)
+	cli.HTTPClient.(*otgo.Client).Endpoint = "http://localhost:8080"
+	cli.HTTPClient.(*otgo.Client).Header.Set("User-Agent", "ot-go-lib")
 	cli.SetPrivateKeys(*otgo.MustKeys(key))
 	err = cli.LoadConfig()
 	if err != nil {
 		panic(err)
 	}
 
-	token, err := cli.Sign(context.Background(), otgo.SignInput{
+	output, err := cli.Sign(context.Background(), otgo.SignInput{
 		Subject:  agent,
 		Audience: td.NewOTID("svc", "testing"),
 	})
-	fmt.Printf("cli.Sign: %#v\n\n", token)
+	fmt.Printf("cli.Sign: %v, %#v\n\n", err, output)
 
-	vid, err := cli.ParseOTVID(context.Background(), token, td.NewOTID("svc", "testing"))
-	fmt.Printf("cli.ParseOTVID: %#v\n\n", vid)
+	vid, err := cli.ParseOTVID(context.Background(), output.OTVID, td.NewOTID("svc", "testing"))
+	fmt.Printf("cli.ParseOTVID: %v, %#v\n\n", err, vid)
 
-	vid, err = cli.Verify(context.Background(), token, td.NewOTID("svc", "testing"))
-	fmt.Printf("cli.Verify: %#v\n\n", vid)
+	vid, err = cli.Verify(context.Background(), output.OTVID, td.NewOTID("svc", "testing"))
+	fmt.Printf("cli.Verify: %v, %#v\n\n", err, vid)
 }

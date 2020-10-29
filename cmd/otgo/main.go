@@ -324,7 +324,7 @@ func main() {
 
 	flag.Parse()
 	ctx := context.Background()
-	cli = cli.WithUA(fmt.Sprintf("Go/%v otgo/%s %s/%s", runtime.Version(), otgo.Version, runtime.GOOS, runtime.GOARCH))
+	cli.Header.Set("User-Agent", fmt.Sprintf("Go/%v otgo/%s %s/%s", runtime.Version(), otgo.Version, runtime.GOOS, runtime.GOARCH))
 
 	os.Exit(int(subcommands.Execute(ctx)))
 }

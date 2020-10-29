@@ -63,11 +63,11 @@ func TestHelper(t *testing.T) {
 		}))
 		defer ts3.Close()
 
-		url, err := otgo.SelectEndpoints(context.Background(), nil, []string{ts0.URL, ts1.URL, ts2.URL})
+		url, err := otgo.SelectEndpoints(context.Background(), []string{ts0.URL, ts1.URL, ts2.URL}, nil)
 		assert.Nil(err)
 		assert.Equal(ts1.URL, url)
 
-		url, err = otgo.SelectEndpoints(context.Background(), nil, []string{ts2.URL, ts3.URL})
+		url, err = otgo.SelectEndpoints(context.Background(), []string{ts2.URL, ts3.URL}, nil)
 		assert.NotNil(err)
 		assert.Equal("", url)
 	})

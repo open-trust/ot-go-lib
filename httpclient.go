@@ -11,7 +11,15 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
+)
+
+type ctxKey int
+
+const (
+	// CtxHeaderKey ...
+	CtxHeaderKey ctxKey = 0
 )
 
 var tr = &http.Transport{
@@ -28,70 +36,31 @@ var tr = &http.Transport{
 	ExpectContinueTimeout: 1 * time.Second,
 }
 
+// Client ...
+type Client struct {
+	*http.Client
+	Header   http.Header
+	Endpoint string
+}
+
 // HTTPClient ...
-type HTTPClient struct {
-	client   *http.Client
-	header   http.Header
-	testHost string
+type HTTPClient interface {
+	Do(ctx context.Context, method, api string, h http.Header, input, output interface{}) error
 }
 
-// Response ...
-type Response struct {
-	Error  interface{} `json:"error"`
-	Result interface{} `json:"result"`
-}
-
-// NewTestClient ...
-func NewTestClient(host string) *HTTPClient {
-	cli := NewHTTPClient(nil)
-	cli.testHost = host
-	return cli
-}
-
-// NewHTTPClient ...
-func NewHTTPClient(client *http.Client) *HTTPClient {
+// NewClient ...
+func NewClient(client *http.Client) *Client {
 	if client == nil {
 		client = &http.Client{
 			Transport: tr,
 			Timeout:   time.Second * 5,
 		}
 	}
-	return &HTTPClient{client: client, header: http.Header{}}
-}
-
-// WithHeader ...
-func (c *HTTPClient) WithHeader(header http.Header) *HTTPClient {
-	hc := *c
-	copyHeader(hc.header, header)
-	return &hc
-}
-
-// WithUA ...
-func (c *HTTPClient) WithUA(ua string) *HTTPClient {
-	h := http.Header{}
-	h.Set("User-Agent", ua)
-	return c.WithHeader(h)
-}
-
-// WithToken ...
-func (c *HTTPClient) WithToken(token string) *HTTPClient {
-	h := http.Header{}
-	AddTokenToHeader(h, token)
-	return c.WithHeader(h)
-}
-
-// Get ...
-func (c *HTTPClient) Get(ctx context.Context, api string, output interface{}) error {
-	return c.Do(ctx, "GET", api, nil, nil, output)
-}
-
-// Post ...
-func (c *HTTPClient) Post(ctx context.Context, api string, input, output interface{}) error {
-	return c.Do(ctx, "POST", api, nil, input, output)
+	return &Client{Client: client, Header: http.Header{}}
 }
 
 // Do ...
-func (c *HTTPClient) Do(ctx context.Context, method, api string, header http.Header, input, output interface{}) error {
+func (c *Client) Do(ctx context.Context, method, api string, h http.Header, input, output interface{}) error {
 	err := ctx.Err()
 	if err != nil {
 		return fmt.Errorf("context.Context error: %v", err)
@@ -104,12 +73,16 @@ func (c *HTTPClient) Do(ctx context.Context, method, api string, header http.Hea
 		}
 	}
 
-	if c.testHost != "" {
-		u, err := url.Parse(api)
-		if err != nil {
-			return err
+	if c.Endpoint != "" {
+		if strings.HasPrefix(api, "http") {
+			u, err := url.Parse(api)
+			if err != nil {
+				return err
+			}
+			api = c.Endpoint + u.RequestURI() // override URL endpoint
+		} else {
+			api = c.Endpoint + api
 		}
-		api = c.testHost + u.RequestURI() // override URL for testing
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, api, &b)
@@ -117,12 +90,19 @@ func (c *HTTPClient) Do(ctx context.Context, method, api string, header http.Hea
 		return fmt.Errorf("create http request error: %v", err)
 	}
 
-	copyHeader(req.Header, c.header, header)
+	copyHeader(req.Header, c.Header)
+	if val := ctx.Value(CtxHeaderKey); val != nil {
+		copyHeader(req.Header, val.(http.Header))
+	}
+	if h != nil {
+		copyHeader(req.Header, h)
+	}
+
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Accept-Encoding", "gzip")
 
-	resp, err := c.client.Do(req)
+	resp, err := c.Client.Do(req)
 	if err != nil {
 		return fmt.Errorf("do http request error: %v", err)
 	}
@@ -148,23 +128,21 @@ func (c *HTTPClient) Do(ctx context.Context, method, api string, header http.Hea
 	}
 
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("server returned a non-success, status code: %v, response: %s",
+		return fmt.Errorf("non-success response, status code: %v, response: %s",
 			resp.StatusCode, string(data))
 	}
 	return nil
 }
 
-func copyHeader(dst http.Header, hs ...http.Header) {
-	for _, h := range hs {
-		for k, vv := range h {
-			switch len(vv) {
-			case 1:
-				dst.Set(k, vv[0])
-			default:
-				dst.Del(k)
-				for _, v := range vv {
-					dst.Add(k, v)
-				}
+func copyHeader(dst http.Header, src http.Header) {
+	for k, vv := range src {
+		switch len(vv) {
+		case 1:
+			dst.Set(k, vv[0])
+		default:
+			dst.Del(k)
+			for _, v := range vv {
+				dst.Add(k, v)
 			}
 		}
 	}

@@ -10,13 +10,13 @@ import (
 )
 
 // Version ...
-const Version = "v0.8.1"
+const Version = "v0.9.0"
 
 const headerAuthorization = "Authorization"
 const authPrefix = "Bearer "
 
 // DefaultHTTPClient ...
-var DefaultHTTPClient = NewHTTPClient(nil)
+var DefaultHTTPClient = NewClient(nil)
 
 // ExtractTokenFromHeader ...
 func ExtractTokenFromHeader(h http.Header) string {
@@ -28,14 +28,15 @@ func ExtractTokenFromHeader(h http.Header) string {
 }
 
 // AddTokenToHeader ...
-func AddTokenToHeader(h http.Header, token string) {
+func AddTokenToHeader(h http.Header, token string) http.Header {
 	if token != "" {
 		h.Set(headerAuthorization, authPrefix+token)
 	}
+	return h
 }
 
 // SelectEndpoints ...
-func SelectEndpoints(ctx context.Context, cli *HTTPClient, serviceEndpoints []string) (string, error) {
+func SelectEndpoints(ctx context.Context, serviceEndpoints []string, cli HTTPClient) (string, error) {
 	if len(serviceEndpoints) == 0 {
 		return "", errors.New("no service endpoints")
 	}
@@ -49,8 +50,10 @@ func SelectEndpoints(ctx context.Context, cli *HTTPClient, serviceEndpoints []st
 	i := int32(len(serviceEndpoints))
 	for _, serviceEndpoint := range serviceEndpoints {
 		go func(url string) {
-			if err := cli.Get(ctx, url, nil); err == nil {
-				ch <- url
+			if strings.HasPrefix(url, "http") {
+				if err := cli.Do(ctx, "GET", url, nil, nil, nil); err == nil {
+					ch <- url
+				}
 			}
 			if atomic.AddInt32(&i, -1) == 0 {
 				cancel()

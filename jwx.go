@@ -92,12 +92,12 @@ func ParseSet(ss ...string) (*JWKSet, error) {
 }
 
 // FetchKeys ...
-func FetchKeys(ctx context.Context, jwkurl string, cli *HTTPClient) (*JWKSet, error) {
+func FetchKeys(ctx context.Context, jwkurl string, cli HTTPClient) (*JWKSet, error) {
 	ks := &jwk.Set{}
 	if cli == nil {
 		cli = DefaultHTTPClient
 	}
-	err := cli.Get(ctx, jwkurl, &ks)
+	err := cli.Do(ctx, "GET", jwkurl, nil, nil, &ks)
 	if err == nil {
 		err = validateKeys(ks.Keys...)
 	}
