@@ -39,8 +39,8 @@ var tr = &http.Transport{
 // Client ...
 type Client struct {
 	*http.Client
-	Header   http.Header
-	Endpoint string
+	Header             http.Header
+	ConstraintEndpoint string // set it for testing purposes only
 }
 
 // HTTPClient ...
@@ -73,15 +73,15 @@ func (c *Client) Do(ctx context.Context, method, api string, h http.Header, inpu
 		}
 	}
 
-	if c.Endpoint != "" {
+	if c.ConstraintEndpoint != "" {
 		if strings.HasPrefix(api, "http") {
 			u, err := url.Parse(api)
 			if err != nil {
 				return err
 			}
-			api = c.Endpoint + u.RequestURI() // override URL endpoint
+			api = c.ConstraintEndpoint + u.RequestURI() // override URL endpoint
 		} else {
-			api = c.Endpoint + api
+			api = c.ConstraintEndpoint + api
 		}
 	}
 

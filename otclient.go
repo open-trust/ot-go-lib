@@ -2,35 +2,23 @@ package otgo
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 )
 
+const nullhost = "nullhost"
+
 // OTClient ...
 type OTClient struct {
-	HTTPClient      HTTPClient
-	ctx             context.Context
-	mu              sync.RWMutex
-	td              TrustDomain
-	sub             OTID
-	aud             OTID
-	ks              *JWKSet
-	domainKs        *JWKSet
-	serviceEndpoint string
-	refresh         time.Duration
-	timeout         time.Duration
-	audsCache       map[string]*audInfo // 简单缓存，Audience 为 key，数据量不大
-	onError         func(err error)
-	serviceClient   *ServiceClient
-}
-
-type audInfo struct {
-	vid      *OTVID
-	endpoint string
+	sub          OTID
+	ks           *JWKSet
+	td           TrustDomain
+	otDomain     *DomainResolver
+	otClient     *ServiceClient
+	domainCache  *cache
+	serviceCache *cache
+	HTTPClient   HTTPClient
 }
 
 // Config ...
@@ -47,21 +35,18 @@ func NewOTClient(ctx context.Context, sub OTID) *OTClient {
 
 	cli := &OTClient{
 		HTTPClient: NewClient(nil),
-		ctx:        ctx,
 		sub:        sub,
-		aud:        sub.TrustDomain().OTID(),
 		td:         sub.TrustDomain(),
-		refresh:    time.Second * 3600,
-		timeout:    time.Second * 5,
-		audsCache:  make(map[string]*audInfo),
+		domainCache: newCache(func(otid OTID) renewer {
+			return &domainRenewer{td: otid.TrustDomain()}
+		}),
+		serviceCache: newCache(func(otid OTID) renewer {
+			return &serviceRenewer{otid: otid}
+		}),
 	}
-	cli.serviceClient = cli.ServiceClient(cli.aud)
+	cli.otDomain = cli.Domain(cli.td)
+	cli.otClient = cli.Service(cli.td.OTID())
 	return cli
-}
-
-// SetDomainKeys ...
-func (oc *OTClient) SetDomainKeys(publicKeys JWKSet) {
-	oc.domainKs = &publicKeys
 }
 
 // SetPrivateKeys ...
@@ -69,29 +54,16 @@ func (oc *OTClient) SetPrivateKeys(privateKeys JWKSet) {
 	oc.ks = &privateKeys
 }
 
-// SetOnError ...
-func (oc *OTClient) SetOnError(cb func(err error)) {
-	oc.onError = cb
+// SetDomainKeys set trust domain's public keys persistently
+// do not call this method if trust domain's OT-Auth service is online.
+func (oc *OTClient) SetDomainKeys(publicKeys JWKSet) {
+	oc.otDomain.ks = &publicKeys
+	oc.otDomain.endpoint = nullhost
+	oc.otDomain.expiresAt = time.Now().Add(time.Hour * 24 * 365 * 99)
 }
 
-// WithAud ...
-func (oc *OTClient) mustGetAudInfo(aud OTID) *audInfo {
-	oc.mu.RLock()
-	info, ok := oc.audsCache[aud.String()]
-	oc.mu.RUnlock()
-	if !ok {
-		oc.mu.Lock()
-		info, ok = oc.audsCache[aud.String()]
-		if !ok {
-			info = &audInfo{}
-			oc.audsCache[aud.String()] = info
-		}
-		oc.mu.Unlock()
-	}
-	return info
-}
-
-// AddAudience ...
+// AddAudience add audience service' config to the OTClient.
+// do not call this method if trust domain's OT-Auth service is online.
 func (oc *OTClient) AddAudience(token, serviceEndpoint string) error {
 	vid, err := ParseOTVIDInsecure(token)
 	if err == nil {
@@ -105,14 +77,14 @@ func (oc *OTClient) AddAudience(token, serviceEndpoint string) error {
 		return err
 	}
 
-	audInfo := oc.mustGetAudInfo(vid.Audience)
-	audInfo.vid = vid
-	audInfo.endpoint = serviceEndpoint
+	renewer := oc.serviceCache.Get(vid.Audience).(*serviceRenewer)
+	renewer.vid = vid
+	renewer.endpoint = serviceEndpoint
 	return nil
 }
 
 // SignSelf ...
-func (oc *OTClient) SignSelf(exp ...time.Duration) (string, error) {
+func (oc *OTClient) SignSelf() (string, error) {
 	key, err := LookupSigningKey(oc.ks)
 	if err != nil {
 		return "", err
@@ -122,11 +94,7 @@ func (oc *OTClient) SignSelf(exp ...time.Duration) (string, error) {
 	vid.ID = oc.sub
 	vid.Issuer = oc.sub
 	vid.Audience = oc.td.OTID()
-	e := time.Minute * 10
-	if len(exp) > 0 {
-		e = exp[0]
-	}
-	vid.Expiry = time.Now().Add(e)
+	vid.Expiry = time.Now().Add(time.Minute * 10)
 	return vid.Sign(key)
 }
 
@@ -156,9 +124,9 @@ type SignOutput struct {
 
 // Sign ...
 func (oc *OTClient) Sign(ctx context.Context, input SignInput) (*SignOutput, error) {
-	cfg := oc.Config()
-	if cfg.ServiceEndpoint == "" {
-		return nil, errors.New("no auth service endpoint, run LoadConfig() firstly")
+	cfg, err := oc.otDomain.Resolve(ctx)
+	if err != nil {
+		return nil, err
 	}
 	selfToken, err := oc.SignSelf()
 	if err != nil {
@@ -166,7 +134,8 @@ func (oc *OTClient) Sign(ctx context.Context, input SignInput) (*SignOutput, err
 	}
 	output := &SignOutput{}
 	h := AddTokenToHeader(make(http.Header), selfToken)
-	err = oc.HTTPClient.Do(ctx, "POST", cfg.ServiceEndpoint+"/sign", h, input, &Response{Result: output})
+	// call with subject's self OTVID
+	err = oc.HTTPClient.Do(ctx, "POST", cfg.Endpoint+"/sign", h, input, &Response{Result: output})
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +155,8 @@ func (oc *OTClient) Verify(ctx context.Context, token string, auds ...OTID) (*OT
 	}
 	jwt := NewToken()
 
-	err := oc.serviceClient.Do(ctx, "POST", "/verify", nil, input, &Response{Result: jwt})
+	// call with subject's OTVID that signing from OT-Auth service
+	err := oc.otClient.Do(ctx, "POST", "/verify", nil, input, &Response{Result: jwt})
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +169,10 @@ func (oc *OTClient) Verify(ctx context.Context, token string, auds ...OTID) (*OT
 
 // ParseOTVID ...
 func (oc *OTClient) ParseOTVID(ctx context.Context, token string, auds ...OTID) (*OTVID, error) {
-	cfg := oc.Config()
+	cfg, err := oc.otDomain.Resolve(ctx)
+	if err != nil {
+		return nil, err
+	}
 	aud := oc.sub
 	if len(auds) > 0 {
 		aud = auds[0]
@@ -208,7 +181,7 @@ func (oc *OTClient) ParseOTVID(ctx context.Context, token string, auds ...OTID) 
 	if err != nil {
 		return nil, err
 	}
-	if vid.MaybeRevoked() && cfg.ServiceEndpoint != "" {
+	if vid.MaybeRevoked() && cfg.Endpoint != "" && cfg.Endpoint != nullhost {
 		vid, err = oc.Verify(ctx, token, aud)
 	}
 	if err != nil {
@@ -217,159 +190,55 @@ func (oc *OTClient) ParseOTVID(ctx context.Context, token string, auds ...OTID) 
 	return vid, nil
 }
 
-// Config ...
-func (oc *OTClient) Config() Config {
-	oc.mu.RLock()
-	defer oc.mu.RUnlock()
-	return Config{
-		JWKSet:          oc.domainKs,
-		ServiceEndpoint: oc.serviceEndpoint,
-	}
+// DomainResolver ...
+type DomainResolver struct {
+	*domainRenewer
+	oc *OTClient
 }
 
-type jsonOTConfigProxy struct {
-	OTID             OTID              `json:"otid"`
-	Keys             []json.RawMessage `json:"keys"`
-	KeysRefreshHint  int64             `json:"keysRefreshHint"`
-	ServiceEndpoints []string          `json:"serviceEndpoints"`
-	ks               JWKSet
+// Resolve ...
+func (dr *DomainResolver) Resolve(ctx context.Context) (*DomainConfig, error) {
+	return dr.domainRenewer.Resolve(ctx, dr.oc)
 }
 
-// LoadConfig ...
-func (oc *OTClient) LoadConfig() error {
-	nCtx, cancel := context.WithTimeout(oc.ctx, oc.timeout)
-	defer cancel()
-
-	res := &jsonOTConfigProxy{}
-	err := oc.HTTPClient.Do(nCtx, "GET", oc.td.ConfigURL(), nil, nil, res)
-	if err == nil {
-		if !res.OTID.Equal(oc.td.OTID()) {
-			return fmt.Errorf("invalid OT-Auth config with %s, need %s", res.OTID.String(), oc.td.OTID().String())
-		}
-		bs := make([][]byte, 0, len(res.Keys))
-		for _, b := range res.Keys {
-			bs = append(bs, []byte(b))
-		}
-
-		res.ks.Keys, err = ParseKeys(bs...)
-		if err == nil {
-			var sp string
-			sp, err = SelectEndpoints(nCtx, res.ServiceEndpoints, oc.HTTPClient)
-			if err == nil {
-				oc.mu.Lock()
-				oc.serviceEndpoint = sp
-				if len(res.ks.Keys) > 0 {
-					oc.domainKs = &res.ks
-				}
-				if res.KeysRefreshHint > 1 {
-					oc.refresh = time.Duration(res.KeysRefreshHint) * time.Second
-				}
-				oc.mu.Unlock()
-			}
-		}
+// Domain ...
+func (oc *OTClient) Domain(td TrustDomain) *DomainResolver {
+	if err := td.Validate(); err != nil {
+		panic(fmt.Errorf("invalid TrustDomain: %s", err.Error()))
 	}
-	return err
-}
-
-// RefreshConfig ...
-func (oc *OTClient) RefreshConfig() error {
-	if err := oc.LoadConfig(); err != nil {
-		return err
-	}
-	go oc.waitAndLoadConfig()
-	return nil
-}
-
-func (oc *OTClient) waitAndLoadConfig() {
-	for {
-		ticker := time.NewTicker(oc.refresh)
-		select {
-		case <-oc.ctx.Done():
-			ticker.Stop()
-			return
-		case <-ticker.C:
-			ticker.Stop()
-			if err := oc.LoadConfig(); err != nil {
-				if oc.onError != nil {
-					oc.onError(err)
-				}
-			}
-		}
-	}
+	renewer := oc.domainCache.Get(td.OTID()).(*domainRenewer)
+	return &DomainResolver{domainRenewer: renewer, oc: oc}
 }
 
 // ServiceClient ...
 type ServiceClient struct {
-	otid OTID
-	mu   sync.RWMutex
-	oc   *OTClient
-	info *audInfo
+	*serviceRenewer
+	oc *OTClient
 }
 
-// ServiceClient ...
-func (oc *OTClient) ServiceClient(aud OTID) *ServiceClient {
+// Service ...
+func (oc *OTClient) Service(aud OTID) *ServiceClient {
 	if err := aud.Validate(); err != nil {
 		panic(fmt.Errorf("invalid audience OTID: %s", err.Error()))
 	}
-	info := oc.mustGetAudInfo(aud)
-	return &ServiceClient{oc: oc, otid: aud, info: info}
+	renewer := oc.serviceCache.Get(aud).(*serviceRenewer)
+	return &ServiceClient{serviceRenewer: renewer, oc: oc}
 }
 
 // Resolve ...
-func (sc *ServiceClient) Resolve(ctx context.Context) (token string, endpoint string, err error) {
-	sc.mu.RLock()
-	vid := sc.info.vid
-	endpoint = sc.info.endpoint
-	sc.mu.RUnlock()
-
-	if endpoint == "" || vid == nil || vid.ShouldRenew() {
-		sc.mu.Lock()
-		defer sc.mu.Unlock()
-
-		if sc.info.endpoint == "" || sc.info.vid == nil || sc.info.vid.ShouldRenew() {
-			output, err := sc.oc.Sign(ctx, SignInput{
-				Subject:  sc.oc.sub,
-				Audience: sc.otid,
-			})
-			if err != nil {
-				return "", "", err
-			}
-			sc.info.vid, err = ParseOTVIDInsecure(output.OTVID)
-			if err != nil {
-				return "", "", err
-			}
-			if sc.info.endpoint == "" || !stringsHas(output.ServiceEndpoints, sc.info.endpoint) {
-				sc.info.endpoint, err = SelectEndpoints(ctx, output.ServiceEndpoints, sc.oc.HTTPClient)
-				if err != nil {
-					return "", "", err
-				}
-			}
-		}
-
-		vid = sc.info.vid
-		endpoint = sc.info.endpoint
-	}
-	return vid.Token(), endpoint, nil
+func (sc *ServiceClient) Resolve(ctx context.Context) (*ServiceConfig, error) {
+	return sc.serviceRenewer.Resolve(ctx, sc.oc)
 }
 
 // Do ...
 func (sc *ServiceClient) Do(ctx context.Context, method, path string, h http.Header, input, output interface{}) error {
-	token, endpoint, err := sc.Resolve(ctx)
+	cfg, err := sc.Resolve(ctx)
 	if err != nil {
 		return err
 	}
 	if h == nil {
 		h = make(http.Header)
 	}
-	AddTokenToHeader(h, token)
-	return sc.oc.HTTPClient.Do(ctx, method, endpoint+path, h, input, output)
-}
-
-func stringsHas(ss []string, s string) bool {
-	for _, v := range ss {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	AddTokenToHeader(h, cfg.OTVID.Token())
+	return sc.oc.HTTPClient.Do(ctx, method, cfg.Endpoint+path, h, input, output)
 }

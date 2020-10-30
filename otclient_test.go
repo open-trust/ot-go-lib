@@ -27,14 +27,14 @@ func TestOTClient(t *testing.T) {
 		cli := otgo.NewOTClient(context.Background(), td.NewOTID("app", "123"))
 
 		var aud otgo.OTID
-		assert.Panics(func() { cli.ServiceClient(aud) })
+		assert.Panics(func() { cli.Service(aud) })
 
 		aud = otgo.OTID{}
-		assert.Panics(func() { cli.ServiceClient(aud) })
+		assert.Panics(func() { cli.Service(aud) })
 
 		aud = td.NewOTID("svc", "tester")
-		scli := cli.ServiceClient(aud)
-		_, _, err := scli.Resolve(context.Background())
+		scli := cli.Service(aud)
+		_, err := scli.Resolve(context.Background())
 		assert.NotNil(err)
 
 		pk := otgo.MustPrivateKey("ES256")
@@ -50,10 +50,10 @@ func TestOTClient(t *testing.T) {
 		err = cli.AddAudience(token, serviceEndpoint)
 		assert.Nil(err)
 
-		token2, endpoint, err := scli.Resolve(context.Background())
+		cfg, err := scli.Resolve(context.Background())
 		assert.Nil(err)
-		assert.Equal(token, token2)
-		assert.Equal(serviceEndpoint, endpoint)
+		assert.Equal(token, cfg.OTVID.Token())
+		assert.Equal(serviceEndpoint, cfg.Endpoint)
 
 		vid = &otgo.OTVID{}
 		vid.ID = td.NewOTID("user", "abc")
@@ -98,7 +98,7 @@ func TestOTClient(t *testing.T) {
 		assert.True(vid.ID.Equal(sub))
 	})
 
-	t.Run("OTClient.LoadConfig method", func(t *testing.T) {
+	t.Run("DomainResolver", func(t *testing.T) {
 		assert := assert.New(t)
 
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -127,16 +127,12 @@ func TestOTClient(t *testing.T) {
 		td := otgo.TrustDomain("localhost")
 		sub := td.NewOTID("app", "123")
 		cli := otgo.NewOTClient(context.Background(), sub)
-		cli.HTTPClient.(*otgo.Client).Endpoint = ts.URL
+		cli.HTTPClient.(*otgo.Client).ConstraintEndpoint = ts.URL
 
-		cfg := cli.Config()
-		assert.Equal("", cfg.ServiceEndpoint)
-
-		err := cli.LoadConfig()
+		df := cli.Domain(td)
+		cfg, err := df.Resolve(context.Background())
 		assert.Nil(err)
-		cfg = cli.Config()
-
-		assert.Equal("https://localhost/v1", cfg.ServiceEndpoint)
+		assert.Equal("https://localhost/v1", cfg.Endpoint)
 		assert.Equal(1, len(cfg.JWKSet.Keys))
 		assert.Equal("ySQYnCsV4cOZBxbHCv4E410k0gjTbi8WfJJwVkV6QqI", cfg.JWKSet.Keys[0].KeyID())
 
@@ -162,8 +158,10 @@ func TestOTClient(t *testing.T) {
 			`))
 		}))
 		defer ts.Close()
-		cli.HTTPClient.(*otgo.Client).Endpoint = ts.URL
-		err = cli.LoadConfig()
+		cli = otgo.NewOTClient(context.Background(), sub)
+		cli.HTTPClient.(*otgo.Client).ConstraintEndpoint = ts.URL
+		df = cli.Domain(td)
+		_, err = df.Resolve(context.Background())
 		assert.NotNil(err)
 	})
 
@@ -205,7 +203,7 @@ func TestOTClient(t *testing.T) {
 		defer ts.Close()
 
 		cli := otgo.NewOTClient(context.Background(), vid.Audience)
-		cli.HTTPClient.(*otgo.Client).Endpoint = ts.URL
+		cli.HTTPClient.(*otgo.Client).ConstraintEndpoint = ts.URL
 		assert.Nil(cli.AddAudience(appToken, ts.URL))
 		cli.SetPrivateKeys(*otgo.MustKeys(otgo.MustPrivateKey("ES256")))
 
